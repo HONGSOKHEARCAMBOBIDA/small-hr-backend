@@ -1,8 +1,11 @@
 package main
 
 import (
+	"log"
 	"mysql/config"
+	"mysql/model"
 	"mysql/routes"
+	"mysql/utils"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -11,7 +14,17 @@ import (
 
 func main() {
 	// Initialize database connection
+	config.LoadEnv()
 	config.ConnectDatabase()
+
+	go func() {
+		for {
+			time.Sleep(24 * time.Hour)
+			result := config.DB.Where("expires_at < ? ", time.Now()).
+				Delete(&model.Session{})
+			log.Printf("Session cleanup: removed %d expired/revoked sessions", result.RowsAffected)
+		}
+	}()
 
 	// Create Gin router
 	r := gin.Default()
@@ -25,7 +38,7 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
-
+	r.Use(utils.SecurityHeaders())
 	// Set up routes
 	routes.SetupRoutes(r)
 
