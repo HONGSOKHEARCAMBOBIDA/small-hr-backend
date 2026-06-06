@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -20,6 +21,8 @@ import (
 
 type AuthService interface {
 	Login(input request.AuthRequest, c *gin.Context) (*response.AuthResponse, error)
+	RefreshToken(input request.RefreshTokenRequest, c *gin.Context) (*response.AuthResponse, error)
+	Register(ctx context.Context, input request.RegisterRequest, c *gin.Context) error
 }
 
 type authservice struct {
@@ -56,7 +59,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	}
 	utils.Redis.Del(utils.Ctx, key)
 
-	accessExpiry := time.Now().Add(15 * time.Minute)
+	accessExpiry := time.Now().Add(60 * time.Minute)
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"phone":   user.PhoneHash,
@@ -109,4 +112,122 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	}
 
 	return resp, nil
+}
+
+func (s *authservice) RefreshToken(input request.RefreshTokenRequest, c *gin.Context) (*response.AuthResponse, error) {
+	if len(input.RefreshToken) < 16 {
+		return nil, errors.New("Invalid refresh token")
+	}
+	prefix := input.RefreshToken[:16]
+	var session model.Session
+	err := s.db.Where("token_prefix = ? AND expires_at > ?",
+		prefix, time.Now()).
+		First(&session).Error
+
+	if err != nil {
+		return nil, errors.New("Invalid or expired refresh token")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(session.RefreshToken), []byte(input.RefreshToken)); err != nil {
+		return nil, errors.New("Invalid or expired refresh token")
+	}
+
+	newRefreshBytes := make([]byte, 32)
+	rand.Read(newRefreshBytes)
+	newRefreshStr := hex.EncodeToString(newRefreshBytes)
+	newHash, _ := bcrypt.GenerateFromPassword([]byte(newRefreshStr), bcrypt.DefaultCost)
+	newPrefix := newRefreshStr[:16]
+
+	s.db.Model(&session).Updates(model.Session{
+		RefreshToken: string(newHash),
+		TokenPrefix:  newPrefix,
+		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
+	})
+
+	var user model.User
+	s.db.First(&user, session.UserID)
+
+	accessExpiry := time.Now().Add(60 * time.Minute)
+	claims := jwt.MapClaims{
+		"user_id": user.ID,
+		"role_id": user.RoleID,
+		"exp":     accessExpiry.Unix(),
+	}
+	accessToken, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(utils.Jwtkey)
+
+	return &response.AuthResponse{
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshStr,
+	}, nil
+}
+
+func (s *authservice) Register(ctx context.Context, input request.RegisterRequest, c *gin.Context) error {
+
+	if len(input.Day) != len(input.CheckIn1) ||
+		len(input.Day) != len(input.CheckOut1) ||
+		len(input.Day) != len(input.IsHalft) ||
+		len(input.Day) != len(input.IsDayoff) {
+		return errors.New("shift fields must have equal length")
+	}
+
+	passwordHash := utils.HasPassword("12345678")
+	qrToken := utils.GenerateQRToken()
+
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	committed := false
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		} else if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	user := model.User{
+		PhoneHash:    input.PhoneHash,
+		PasswordHash: passwordHash,
+		RoleID:       input.RoleID,
+		IsActive:     true,
+		Name:         input.Name,
+		Gender:       input.Gender,
+		BaseSalary:   input.BaseSalary,
+		CompanyID:    input.CompanyID,
+		QrToken:      qrToken,
+		IsVerify:     false,
+	}
+	if err := tx.Create(&user).Error; err != nil {
+		return err
+	}
+
+	if len(input.Day) > 0 {
+		shifts := make([]model.Shift, len(input.Day))
+		for i := range input.Day {
+			shifts[i] = model.Shift{
+				UserID:    user.ID,
+				Day:       input.Day[i],
+				IsHalft:   input.IsHalft[i],
+				IsDayoff:  input.IsDayoff[i],
+				CheckIn1:  input.CheckIn1[i],
+				CheckOut1: input.CheckOut1[i],
+			}
+			if i < len(input.CheckIn2) {
+				shifts[i].CheckIn2 = input.CheckIn2[i]
+			}
+			if i < len(input.CheckOut2) {
+				shifts[i].CheckOut2 = input.CheckOut2[i]
+			}
+		}
+		if err := tx.Create(&shifts).Error; err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }

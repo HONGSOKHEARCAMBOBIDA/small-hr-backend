@@ -19,7 +19,7 @@ func NewAuthController() AuthController {
 	}
 }
 
-func (cr AuthController) Login(c *gin.Context) {
+func (cr *AuthController) Login(c *gin.Context) {
 	var input request.AuthRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		share.ResponseError(c, 400, err.Error())
@@ -31,5 +31,19 @@ func (cr AuthController) Login(c *gin.Context) {
 		return
 	}
 
+	share.RespondDate(c, http.StatusOK, result)
+}
+
+func (cr *AuthController) Refresh(c *gin.Context) {
+	var input request.RefreshTokenRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	result, err := cr.service.RefreshToken(input, c)
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
 	share.RespondDate(c, http.StatusOK, result)
 }

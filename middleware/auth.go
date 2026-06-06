@@ -77,7 +77,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		var user model.User
 
-		if err := config.DB.Where("id = ? AND isactive = ?", userID, 1).First(&user).Error; err != nil {
+		if err := config.DB.Where("id = ? AND is_active = ?", userID, 1).First(&user).Error; err != nil {
 
 			c.AbortWithStatusJSON(403, gin.H{"message": "User is not active"})
 

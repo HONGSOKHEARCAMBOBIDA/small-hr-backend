@@ -3,12 +3,13 @@ package route
 const (
 
 	// Authentication
-	Login = "login"
+	Login   = "login"
+	Refresh = "refresh"
 
 	// Company
 	AddCompany  = "add.company"
 	ViewCompany = "view.company"
-	EditCompany = "edit.company"
+	EditCompany = "edit.company/:id"
 
 	// User
 	AddUser  = "add.user"

@@ -1,0 +1,19 @@
+package request
+
+type CompanyRequestCreate struct {
+	Name        string `json:"name" bind:"required"`
+	Latitude    string `json:"latitude" bind:"required"`
+	Longitude   string `json:"longitude" bind:"required"`
+	Radius      string `json:"radius" bind:"required"`
+	BotToken    string `json:"bot_token"`
+	GroupChatID string `json:"group_chatID"`
+}
+
+type CompanyRequesUpdate struct {
+	Name        *string `json:"name"`
+	Latitude    *string `json:"latitude"`
+	Longitude   *string `json:"longitude"`
+	Radius      *string `json:"radius"`
+	BotToken    *string `json:"bot_token"`
+	GroupChatID *string `json:"group_chatID"`
+}
