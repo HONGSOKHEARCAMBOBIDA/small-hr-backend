@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"mysql/config"
+	"mysql/helper"
 	"mysql/model"
 	"mysql/request"
 	"mysql/response"
@@ -23,6 +24,7 @@ type AuthService interface {
 	Login(input request.AuthRequest, c *gin.Context) (*response.AuthResponse, error)
 	RefreshToken(input request.RefreshTokenRequest, c *gin.Context) (*response.AuthResponse, error)
 	Register(ctx context.Context, input request.RegisterRequest, c *gin.Context) error
+	GetUser(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.UserResponse, *model.PaginationMetadata, error)
 }
 
 type authservice struct {
@@ -230,4 +232,106 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 	}
 	committed = true
 	return nil
+}
+
+func applyAccessFilter(query *gorm.DB, db *gorm.DB, role model.Role, user model.User) *gorm.DB {
+	if role.Level < 7 {
+		return query.Where("u.company_id = ?", user.CompanyID)
+	}
+	return query
+}
+
+func applyCommonFilter(query *gorm.DB, filter map[string]string) *gorm.DB {
+	for key, value := range filter {
+		if value == "" {
+			continue
+		}
+		switch key {
+		case "name":
+			query = query.Where("u.name LIKE ?", "%"+value+"%")
+		case "company_id":
+			query = query.Where("u.company_id =?", value)
+		case "role_id":
+			query = query.Where("u.role_id =?", value)
+		}
+	}
+	return query
+}
+
+func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.UserResponse, *model.PaginationMetadata, error) {
+	var users []response.UserResponse
+	var user model.User
+	if err := s.db.WithContext(ctx).Preload("Role").First(&user, id).Error; err != nil {
+		return nil, nil, err
+	}
+
+	offset := (pf.Page - 1) * pf.PageSize
+	userquery := s.db.WithContext(ctx).Table("user u").
+		Select(`
+            u.id AS id,
+            u.phone_hash AS phone_hash,
+            r.id AS role_id,
+            r.display_name AS role_name,
+            u.is_active AS is_active,
+            u.name AS name,
+            u.gender AS gender,
+            u.base_salary AS base_salary,
+            c.id AS company_id,
+            c.name AS company_name,
+            u.qr_token AS qr_token,
+            u.is_verify AS is_verify
+        `).
+		Joins("LEFT JOIN role r ON r.id = u.role_id").
+		Joins("LEFT JOIN company c ON c.id = u.company_id")
+
+	userquery = applyAccessFilter(userquery, s.db, user.Role, user)
+	userquery = applyCommonFilter(userquery, filter)
+
+	var totalCount int64
+	countQuery := userquery.Session(&gorm.Session{})
+	if err := countQuery.Count(&totalCount).Error; err != nil {
+		return nil, nil, err
+	}
+
+	if err := userquery.Offset(offset).Limit(pf.PageSize).Scan(&users).Error; err != nil {
+		return nil, nil, err
+	}
+
+	if len(users) == 0 {
+		return users, helper.BuildPaginationMeta(pf, totalCount), nil
+	}
+
+	userIDs := make([]int, len(users))
+	for i, a := range users {
+		userIDs[i] = a.ID
+	}
+
+	var shifts []response.ShiftResponse
+	shiftquery := s.db.WithContext(ctx).Table("shift s").
+		Select(`
+            s.id AS id,
+            s.user_id AS user_id,
+            s.check_in1 AS check_in1,
+            s.check_out1 AS check_out1,
+            s.check_in2 AS check_in2,
+            s.check_out2 AS check_out2,
+            s.is_halft AS is_halft,
+            s.day AS day,
+            s.is_dayoff AS is_dayoff
+        `).Where("s.user_id IN ?", userIDs)
+
+	if err := shiftquery.Scan(&shifts).Error; err != nil {
+		return nil, nil, err
+	}
+
+	shiftByUserID := make(map[int][]response.ShiftResponse, len(users))
+	for _, r := range shifts {
+		shiftByUserID[r.UserID] = append(shiftByUserID[r.UserID], r)
+	}
+
+	for i, a := range users {
+		users[i].ShiftResponse = shiftByUserID[a.ID]
+	}
+
+	return users, helper.BuildPaginationMeta(pf, totalCount), nil
 }

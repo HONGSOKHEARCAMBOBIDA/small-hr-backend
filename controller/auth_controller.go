@@ -47,3 +47,16 @@ func (cr *AuthController) Refresh(c *gin.Context) {
 	}
 	share.RespondDate(c, http.StatusOK, result)
 }
+
+func (cr *AuthController) Register(c *gin.Context) {
+	var input request.RegisterRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := cr.service.Register(c, input, c); err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.ResponseSuccess(c, http.StatusOK, "user create")
+}

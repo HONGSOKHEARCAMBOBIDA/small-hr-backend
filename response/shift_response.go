@@ -1,12 +1,10 @@
-package model
+package response
 
-import (
-	"mysql/model/base"
-)
+import "mysql/model/base"
 
-type Shift struct {
+type ShiftResponse struct {
 	base.ModelBase
-	UserID    int    `json:"user_id" gorm:"column:user_id"`
+	UserID    int    `json:"user_id"`
 	CheckIn1  string `json:"check_in1" gorm:"column:check_in1"`
 	CheckOut1 string `json:"check_out1" gorm:"column:check_out1"`
 	CheckIn2  string `json:"check_in2" gorm:"column:check_in2"`
@@ -14,8 +12,4 @@ type Shift struct {
 	IsHalft   bool   `json:"is_halft" gorm:"column:is_halft"`
 	Day       int    `json:"day" gorm:"column:day"`
 	IsDayoff  bool   `json:"is_dayoff" gorm:"column:is_dayoff"`
-}
-
-func (Shift) TableName() string {
-	return "shift"
 }
