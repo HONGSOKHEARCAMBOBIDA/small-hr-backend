@@ -12,9 +12,10 @@ const (
 	EditCompany = "edit.company/:id"
 
 	// User
-	AddUser  = "add.user"
-	ViewUser = "view.user"
-	EditUser = "edit.user"
+	AddUser          = "add.user"
+	ViewUser         = "view.user"
+	EditUser         = "edit.user"
+	ToggleUserStatus = "toggle.status.user/:id"
 
 	// Attendance
 	AddAttendance  = "add.attendance"

@@ -25,6 +25,7 @@ type AuthService interface {
 	RefreshToken(input request.RefreshTokenRequest, c *gin.Context) (*response.AuthResponse, error)
 	Register(ctx context.Context, input request.RegisterRequest, c *gin.Context) error
 	GetUser(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.UserResponse, *model.PaginationMetadata, error)
+	ToggleUserStatus(ctx context.Context, userID int, id int) error
 }
 
 type authservice struct {
@@ -279,10 +280,12 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
             c.id AS company_id,
             c.name AS company_name,
             u.qr_token AS qr_token,
-            u.is_verify AS is_verify
+            u.is_verify AS is_verify,
+			s.value AS currency
         `).
 		Joins("LEFT JOIN role r ON r.id = u.role_id").
-		Joins("LEFT JOIN company c ON c.id = u.company_id")
+		Joins("LEFT JOIN company c ON c.id = u.company_id").
+		Joins("LEFT JOIN setting s ON s.key = ?", "CURRENCY")
 
 	userquery = applyAccessFilter(userquery, s.db, user.Role, user)
 	userquery = applyCommonFilter(userquery, filter)
@@ -295,6 +298,10 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 
 	if err := userquery.Offset(offset).Limit(pf.PageSize).Scan(&users).Error; err != nil {
 		return nil, nil, err
+	}
+
+	for i := range users {
+		users[i].GenderString = helper.Gender(users[i].Gender)
 	}
 
 	if len(users) == 0 {
@@ -324,6 +331,10 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 		return nil, nil, err
 	}
 
+	for i := range shifts {
+		shifts[i].DayName = helper.DayKhmer(shifts[i].Day)
+	}
+
 	shiftByUserID := make(map[int][]response.ShiftResponse, len(users))
 	for _, r := range shifts {
 		shiftByUserID[r.UserID] = append(shiftByUserID[r.UserID], r)
@@ -334,4 +345,12 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 	}
 
 	return users, helper.BuildPaginationMeta(pf, totalCount), nil
+}
+
+func (s *authservice) ToggleUserStatus(ctx context.Context, userID int, id int) error {
+	result := s.db.WithContext(ctx).Model(&model.User{}).Where("id =?", id).Update("is_active", gorm.Expr("NOT is_active"))
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
 }

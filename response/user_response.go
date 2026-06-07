@@ -11,7 +11,9 @@ type UserResponse struct {
 	IsActive      bool            `json:"is_active" gorm:"column:is_active"`
 	Name          string          `json:"name" gorm:"column:name"`
 	Gender        int             `json:"gender" gorm:"column:gender"`
+	GenderString  string          `json:"gender_string"`
 	BaseSalary    string          `json:"base_salary" gorm:"column:base_salary"`
+	Currency      string          `json:"currency"`
 	CompanyID     int             `json:"company_id" gorm:"column:company_id"`
 	CompanyName   string          `json:"company_name" gorm:"column:company_name"`
 	QrToken       string          `json:"qr_token" gorm:"column:qr_token"`

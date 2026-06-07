@@ -11,5 +11,6 @@ type ShiftResponse struct {
 	CheckOut2 string `json:"check_out2" gorm:"column:check_out2"`
 	IsHalft   bool   `json:"is_halft" gorm:"column:is_halft"`
 	Day       int    `json:"day" gorm:"column:day"`
+	DayName   string `json:"day_name"`
 	IsDayoff  bool   `json:"is_dayoff" gorm:"column:is_dayoff"`
 }
