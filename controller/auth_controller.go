@@ -51,12 +51,17 @@ func (cr *AuthController) Refresh(c *gin.Context) {
 }
 
 func (cr *AuthController) Register(c *gin.Context) {
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
 	var input request.RegisterRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		share.ResponseError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := cr.service.Register(c, input, c); err != nil {
+	if err := cr.service.Register(c, input, c, userID); err != nil {
 		share.ResponseError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -116,4 +121,41 @@ func (cr *AuthController) ToggleUserStatus(c *gin.Context) {
 		return
 	}
 	share.ResponseSuccess(c, http.StatusOK, "status changed")
+}
+
+func (cr *AuthController) ChangePassword(c *gin.Context) {
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
+	var input request.NewPasswordRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := cr.service.ChangePassword(c, userID, input); err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.ResponseSuccess(c, http.StatusOK, "password changed")
+}
+
+func (cr *AuthController) UpdateUser(c *gin.Context) {
+	idparam := c.Param("id")
+	id, err := strconv.Atoi(idparam)
+	if err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	var input request.UserRequestUpdate
+	if err := c.ShouldBindJSON(&input); err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := cr.service.UpdateUser(c, input, id); err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.ResponseSuccess(c, http.StatusOK, "updated user")
 }

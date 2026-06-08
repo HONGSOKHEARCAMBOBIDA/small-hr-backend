@@ -14,8 +14,12 @@ const (
 	// User
 	AddUser          = "add.user"
 	ViewUser         = "view.user"
-	EditUser         = "edit.user"
+	EditUser         = "edit.user/:id"
 	ToggleUserStatus = "toggle.status.user/:id"
+	ChangePassword   = "change.password"
+
+	// Shift
+	EditShift = "edit.shift"
 
 	// Attendance
 	AddAttendance  = "add.attendance"

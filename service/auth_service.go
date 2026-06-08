@@ -23,9 +23,11 @@ import (
 type AuthService interface {
 	Login(input request.AuthRequest, c *gin.Context) (*response.AuthResponse, error)
 	RefreshToken(input request.RefreshTokenRequest, c *gin.Context) (*response.AuthResponse, error)
-	Register(ctx context.Context, input request.RegisterRequest, c *gin.Context) error
+	Register(ctx context.Context, input request.RegisterRequest, c *gin.Context, userID int) error
 	GetUser(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.UserResponse, *model.PaginationMetadata, error)
 	ToggleUserStatus(ctx context.Context, userID int, id int) error
+	ChangePassword(ctx context.Context, userID int, input request.NewPasswordRequest) error
+	UpdateUser(ctx context.Context, input request.UserRequestUpdate, id int) error
 }
 
 type authservice struct {
@@ -163,7 +165,7 @@ func (s *authservice) RefreshToken(input request.RefreshTokenRequest, c *gin.Con
 	}, nil
 }
 
-func (s *authservice) Register(ctx context.Context, input request.RegisterRequest, c *gin.Context) error {
+func (s *authservice) Register(ctx context.Context, input request.RegisterRequest, c *gin.Context, userID int) error {
 
 	if len(input.Day) != len(input.CheckIn1) ||
 		len(input.Day) != len(input.CheckOut1) ||
@@ -172,9 +174,16 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 		return errors.New("shift fields must have equal length")
 	}
 
+	var usrlog model.User
+	if err := s.db.WithContext(ctx).First(&usrlog, userID).Error; err != nil {
+		return err
+	}
 	passwordHash := utils.HasPassword("12345678")
 	qrToken := utils.GenerateQRToken()
-
+	companyID := input.CompanyID
+	if companyID == 0 {
+		companyID = usrlog.CompanyID
+	}
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		return tx.Error
@@ -197,7 +206,7 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 		Name:         input.Name,
 		Gender:       input.Gender,
 		BaseSalary:   input.BaseSalary,
-		CompanyID:    input.CompanyID,
+		CompanyID:    companyID,
 		QrToken:      qrToken,
 		IsVerify:     false,
 	}
@@ -349,6 +358,45 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 
 func (s *authservice) ToggleUserStatus(ctx context.Context, userID int, id int) error {
 	result := s.db.WithContext(ctx).Model(&model.User{}).Where("id =?", id).Update("is_active", gorm.Expr("NOT is_active"))
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+func (s *authservice) ChangePassword(ctx context.Context, userID int, input request.NewPasswordRequest) error {
+	var user model.User
+	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
+		return err
+	}
+
+	hash := utils.HasPassword(input.NewPassword)
+	if err := s.db.WithContext(ctx).Model(&user).Update("password_hash", hash).Error; err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestUpdate, id int) error {
+	updates := map[string]interface{}{}
+
+	if input.PhoneHash != nil {
+		updates["phone_hash"] = *input.PhoneHash
+	}
+	if input.RoleID != nil {
+		updates["role_id"] = *input.RoleID
+	}
+	if input.Name != nil {
+		updates["name"] = *input.Name
+	}
+	if input.Gender != nil {
+		updates["gender"] = *input.Gender
+	}
+	if input.BaseSalary != nil {
+		updates["base_salary"] = *input.BaseSalary
+	}
+	result := s.db.WithContext(ctx).Model(&model.User{}).Where("id =?", id).Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}

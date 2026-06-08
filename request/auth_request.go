@@ -24,3 +24,15 @@ type RegisterRequest struct {
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
+
+type NewPasswordRequest struct {
+	NewPassword string `json:"new_password"`
+}
+
+type UserRequestUpdate struct {
+	PhoneHash  *string `json:"phone_hash"`
+	RoleID     *int    `json:"role_id"`
+	Name       *string `json:"name"`
+	Gender     *int    `json:"gender"`
+	BaseSalary *string `json:"base_salary"`
+}
