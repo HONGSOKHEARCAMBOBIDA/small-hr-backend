@@ -88,6 +88,7 @@ func (s *companyservice) CreateCompany(ctx context.Context, input request.Compan
 		Isactive:    true,
 		BotToken:    &input.BotToken,
 		GroupChatID: &input.GroupChatID,
+		Currency:    input.Currency,
 	}
 
 	if err := tx.WithContext(ctx).
@@ -118,6 +119,9 @@ func (s *companyservice) UpdateCompany(ctx context.Context, id int, input reques
 	}
 	if input.GroupChatID != nil {
 		updates["group_chatID"] = *input.GroupChatID
+	}
+	if input.Currency != nil {
+		updates["currency"] = *input.Currency
 	}
 	if len(updates) == 0 {
 		return errors.New(" no field to update")

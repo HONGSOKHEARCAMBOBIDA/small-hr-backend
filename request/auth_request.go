@@ -5,6 +5,10 @@ type AuthRequest struct {
 	Password string `json:"password"`
 }
 
+type LoginQrRequest struct {
+	QrToken string `json:"qr_token"`
+}
+
 type RegisterRequest struct {
 	PhoneHash  string   `json:"phone_hash" gorm:"column:phone_hash"`
 	RoleID     int      `json:"role_id" gorm:"column:role_id"`

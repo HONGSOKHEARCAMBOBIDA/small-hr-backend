@@ -22,6 +22,7 @@ import (
 
 type AuthService interface {
 	Login(input request.AuthRequest, c *gin.Context) (*response.AuthResponse, error)
+	LoginByQr(input request.LoginQrRequest, c *gin.Context) (*response.AuthResponse, error)
 	RefreshToken(input request.RefreshTokenRequest, c *gin.Context) (*response.AuthResponse, error)
 	Register(ctx context.Context, input request.RegisterRequest, c *gin.Context, userID int) error
 	GetUser(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.UserResponse, *model.PaginationMetadata, error)
@@ -112,6 +113,77 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	resp := &response.AuthResponse{
 		ID:           user.ID,
 		Name:         user.PhoneHash,
+		AccessToken:  accessTokenStr,
+		RefreshToken: refreshTokenStr,
+	}
+
+	return resp, nil
+}
+
+func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*response.AuthResponse, error) {
+	var user model.User
+	if err := s.db.
+		Where("qr_token = ? AND is_active = 1", input.QrToken).
+		First(&user).Error; err != nil {
+		return nil, errors.New("ព័ត៌មានមិនត្រឹមត្រូវ ឬ អ្នកប្រើប្រាស់ត្រូវបានបិទគណនី")
+	}
+
+	newQrToken := utils.GenerateQRToken()
+	if err := s.db.Model(&model.User{}).
+		Where("id = ?", user.ID).
+		Update("qr_token", newQrToken).Error; err != nil {
+		return nil, fmt.Errorf("failed to rotate qr token: %w", err)
+	}
+
+	accessExpiry := time.Now().Add(60 * time.Minute)
+	claims := jwt.MapClaims{
+		"user_id": user.ID,
+		"phone":   user.PhoneHash,
+		"role_id": user.RoleID,
+		"exp":     accessExpiry.Unix(),
+	}
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	accessTokenStr, err := accessToken.SignedString(utils.Jwtkey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign access token: %w", err)
+	}
+
+	refreshTokenBytes := make([]byte, 32)
+	if _, err := rand.Read(refreshTokenBytes); err != nil {
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+	refreshTokenStr := hex.EncodeToString(refreshTokenBytes)
+	tokenPrefix := refreshTokenStr[:16]
+	hashedRefresh, err := bcrypt.GenerateFromPassword([]byte(refreshTokenStr), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash refresh token: %w", err)
+	}
+
+	var sessionCount int64
+	s.db.Model(&model.Session{}).
+		Where("user_id = ? AND expires_at > ?", user.ID, time.Now()).
+		Count(&sessionCount)
+
+	if sessionCount >= 5 {
+		s.db.Where("user_id = ? AND expires_at > ?", user.ID, time.Now()).
+			Order("created_at ASC").
+			Limit(1).
+			Delete(&model.Session{})
+	}
+
+	session := model.Session{
+		UserID:       uint(user.ID),
+		RefreshToken: string(hashedRefresh),
+		TokenPrefix:  tokenPrefix,
+		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
+	}
+	if err := s.db.Create(&session).Error; err != nil {
+		return nil, fmt.Errorf("failed to create session: %w", err)
+	}
+
+	resp := &response.AuthResponse{
+		ID:           user.ID,
+		Name:         user.Name,
 		AccessToken:  accessTokenStr,
 		RefreshToken: refreshTokenStr,
 	}
@@ -290,11 +362,10 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
             c.name AS company_name,
             u.qr_token AS qr_token,
             u.is_verify AS is_verify,
-			s.value AS currency
+			c.currency AS currency
         `).
 		Joins("LEFT JOIN role r ON r.id = u.role_id").
-		Joins("LEFT JOIN company c ON c.id = u.company_id").
-		Joins("LEFT JOIN setting s ON s.key = ?", "CURRENCY")
+		Joins("LEFT JOIN company c ON c.id = u.company_id")
 
 	userquery = applyAccessFilter(userquery, s.db, user.Role, user)
 	userquery = applyCommonFilter(userquery, filter)

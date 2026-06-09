@@ -36,6 +36,20 @@ func (cr *AuthController) Login(c *gin.Context) {
 	share.RespondDate(c, http.StatusOK, result)
 }
 
+func (cr *AuthController) LoginByQr(c *gin.Context) {
+	var input request.LoginQrRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	result, err := cr.service.LoginByQr(input, c)
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.RespondDate(c, http.StatusOK, result)
+}
+
 func (cr *AuthController) Refresh(c *gin.Context) {
 	var input request.RefreshTokenRequest
 	if err := c.ShouldBindJSON(&input); err != nil {

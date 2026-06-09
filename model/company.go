@@ -11,6 +11,7 @@ type Company struct {
 	Radius      string  `json:"radius" gorm:"column:radius"`
 	BotToken    *string `json:"bot_token" gorm:"column:bot_token"`
 	GroupChatID *string `json:"group_chatID" gorm:"column:group_chatID"`
+	Currency    string  `json:"currency"`
 }
 
 func (Company) TableName() string {

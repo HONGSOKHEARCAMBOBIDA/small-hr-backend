@@ -13,6 +13,7 @@ type User struct {
 	Gender       int    `json:"gender" gorm:"column:gender"`
 	BaseSalary   string `json:"base_salary" gorm:"column:base_salary"`
 	CompanyID    int    `json:"company_id" gorm:"column:company_id"`
+	Company      Company
 	QrToken      string `json:"qr_token" gorm:"column:qr_token"`
 	IsVerify     bool   `json:"is_verify" gorm:"column:is_verify"`
 }

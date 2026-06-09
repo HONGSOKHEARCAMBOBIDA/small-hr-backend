@@ -3,8 +3,9 @@ package route
 const (
 
 	// Authentication
-	Login   = "login"
-	Refresh = "refresh"
+	Login     = "login"
+	LoginByQr = "loginbyqr"
+	Refresh   = "refresh"
 
 	// Company
 	AddCompany  = "add.company"

@@ -7,6 +7,7 @@ type CompanyRequestCreate struct {
 	Radius      string `json:"radius" bind:"required"`
 	BotToken    string `json:"bot_token"`
 	GroupChatID string `json:"group_chatID"`
+	Currency    string `json:"currency"`
 }
 
 type CompanyRequesUpdate struct {
@@ -16,4 +17,5 @@ type CompanyRequesUpdate struct {
 	Radius      *string `json:"radius"`
 	BotToken    *string `json:"bot_token"`
 	GroupChatID *string `json:"group_chatID"`
+	Currency    *string `json:"currency"`
 }
