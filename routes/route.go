@@ -38,6 +38,7 @@ func SetupRoutes(r *gin.Engine) {
 
 		// Attendance
 		auth.POST(route.AddAttendance, middleware.PermissionMiddleware(permission.AddAttendance), attendancecontroller.CreateAttendance)
+		auth.GET(route.ViewAttendance, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendance)
 
 	}
 }
