@@ -32,3 +32,17 @@ func (cr *ShiftController) UpdateShift(c *gin.Context) {
 	}
 	share.ResponseSuccess(c, http.StatusOK, "Updated shift")
 }
+
+func (cr *ShiftController) CreateShift(c *gin.Context) {
+	var input request.ShiftRequestCreate
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := cr.service.CreateShift(c, input); err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.ResponseSuccess(c, http.StatusOK, "Create shift")
+}

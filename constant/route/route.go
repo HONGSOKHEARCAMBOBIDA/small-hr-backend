@@ -21,6 +21,7 @@ const (
 
 	// Shift
 	EditShift = "edit.shift"
+	AddShift  = "add.shift"
 
 	// Attendance
 	AddAttendance  = "add.attendance"

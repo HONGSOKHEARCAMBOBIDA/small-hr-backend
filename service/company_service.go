@@ -81,14 +81,16 @@ func (s *companyservice) CreateCompany(ctx context.Context, input request.Compan
 		return tx.Error
 	}
 	newCompany := model.Company{
-		Name:        input.Name,
-		Latitude:    input.Latitude,
-		Longitude:   input.Longitude,
-		Radius:      input.Radius,
-		Isactive:    true,
-		BotToken:    &input.BotToken,
-		GroupChatID: &input.GroupChatID,
-		Currency:    input.Currency,
+		Name:             input.Name,
+		Latitude:         input.Latitude,
+		Longitude:        input.Longitude,
+		Radius:           input.Radius,
+		Isactive:         true,
+		BotToken:         &input.BotToken,
+		GroupChatID:      &input.GroupChatID,
+		Currency:         input.Currency,
+		LatePenalty:      input.LatePenalty,
+		LeftEarlyPenalty: input.LeftEarlyPenalty,
 	}
 
 	if err := tx.WithContext(ctx).
@@ -122,6 +124,12 @@ func (s *companyservice) UpdateCompany(ctx context.Context, id int, input reques
 	}
 	if input.Currency != nil {
 		updates["currency"] = *input.Currency
+	}
+	if input.LatePenalty != nil {
+		updates["late_penalty"] = *input.LatePenalty
+	}
+	if input.LeftEarlyPenalty != nil {
+		updates["left_early_penalty"] = *input.LeftEarlyPenalty
 	}
 	if len(updates) == 0 {
 		return errors.New(" no field to update")

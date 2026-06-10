@@ -402,7 +402,7 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
             s.check_out1 AS check_out1,
             s.check_in2 AS check_in2,
             s.check_out2 AS check_out2,
-            s.is_halft AS is_halft,
+            s.shift_type AS shift_type,
             s.day AS day,
             s.is_dayoff AS is_dayoff
         `).Where("s.user_id IN ?", userIDs)
@@ -413,6 +413,7 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 
 	for i := range shifts {
 		shifts[i].DayName = helper.DayKhmer(shifts[i].Day)
+		shifts[i].ShiftTypeString = helper.ShiftType(shifts[i].ShiftType)
 	}
 
 	shiftByUserID := make(map[int][]response.ShiftResponse, len(users))
