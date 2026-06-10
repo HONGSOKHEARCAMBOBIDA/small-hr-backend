@@ -97,8 +97,7 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	inZone := distance <= radius
 
 	var attendance model.Attendance
-	err = tx.Where("user_id = ? AND check_date = ?", user.ID, currentDate).
-		First(&attendance).Error
+	err = tx.Where("user_id = ? AND check_date = ?", user.ID, currentDate).First(&attendance).Error
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			tx.Rollback()
@@ -126,22 +125,55 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 
 	recordCount := len(existingRecords)
 
-	// Determine action: 0=CheckIn1, 1=CheckOut1, 2=CheckIn2, 3=CheckOut2
-	// recordCount 0 → CheckIn1
-	// recordCount 1 → CheckOut1
-	// recordCount 2 → CheckIn2
-	// recordCount 3 → CheckOut2
+	// Build session list based on ShiftType
+	// ShiftType 1 = Full day    → CheckIn1, CheckOut1, CheckIn2, CheckOut2
+	// ShiftType 2 = Morning only → CheckIn1, CheckOut1
+	// ShiftType 3 = Evening only → CheckIn2, CheckOut2
 
-	if recordCount >= 2 && shift.CheckIn2 == "" {
-		tx.Rollback()
-		return errors.New("no second session in shift")
+	type sessionConfig struct {
+		scheduledTime string
+		isCheckIn     bool
+		recordType    int // 1=CheckIn1, 2=CheckOut1, 3=CheckIn2, 4=CheckOut2
 	}
 
-	if recordCount >= 4 {
+	var sessions []sessionConfig
+
+	switch shift.ShiftType {
+
+	case 2:
+		if shift.CheckIn1 == "" || shift.CheckOut1 == "" {
+			return errors.New("ធ្វេីការវែនព្រឹកតែមិនទាន់ដាក់ម៉ោងចេញចូល")
+		}
+		sessions = []sessionConfig{
+			{scheduledTime: shift.CheckIn1, isCheckIn: true, recordType: 1},
+			{scheduledTime: shift.CheckOut1, isCheckIn: false, recordType: 2},
+		}
+	case 3:
+		if shift.CheckIn2 == "" || shift.CheckOut2 == "" {
+			return errors.New("ធ្វេីការវែនល្ងាចតែមិនទាន់ដាក់ម៉ោងចេញចូល")
+		}
+		sessions = []sessionConfig{
+			{scheduledTime: shift.CheckIn2, isCheckIn: true, recordType: 3},
+			{scheduledTime: shift.CheckOut2, isCheckIn: false, recordType: 4},
+		}
+	default:
+		if shift.CheckIn1 == "" || shift.CheckOut1 == "" || shift.CheckIn2 == "" || shift.CheckOut2 == "" {
+			return errors.New("គ្មានម៉ោងធ្វេីការ")
+		}
+		sessions = []sessionConfig{
+			{scheduledTime: shift.CheckIn1, isCheckIn: true, recordType: 1},
+			{scheduledTime: shift.CheckOut1, isCheckIn: false, recordType: 2},
+			{scheduledTime: shift.CheckIn2, isCheckIn: true, recordType: 3},
+			{scheduledTime: shift.CheckOut2, isCheckIn: false, recordType: 4},
+		}
+	}
+
+	maxRecords := len(sessions)
+
+	if recordCount >= maxRecords {
 		if err := tx.Model(&model.Attendance{}).
 			Where("id = ?", attendance.ID).
 			Update("status", "COMPLETE").Error; err != nil {
-			tx.Rollback()
 			return fmt.Errorf("failed to update attendance status: %w", err)
 		}
 		if err := tx.Commit().Error; err != nil {
@@ -151,34 +183,9 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 		return errors.New("all check-ins and check-outs completed for today")
 	}
 
-	// Determine attendance_type by comparing current time vs shift schedule
-	// attendance_type:
-	// 1 = ចូលធ្វើការមុនម៉ោង  (check-in early)
-	// 2 = ចូលធ្វើការទាន់ម៉ោង (check-in on time)
-	// 3 = ចូលធ្វើការយឺត      (check-in late)
-	// 4 = ចេញពីធ្វើការមុនម៉ោង (check-out early)
-	// 5 = ចេញពីធ្វើការត្រឹមម៉ោង(check-out on time)
-	// 6 = ចេញពីធ្វើការក្រោយម៉ោង(check-out overtime)
+	current := sessions[recordCount]
 
-	var scheduledTime string
-	var isCheckIn bool
-
-	switch recordCount {
-	case 0:
-		scheduledTime = shift.CheckIn1
-		isCheckIn = true
-	case 1:
-		scheduledTime = shift.CheckOut1
-		isCheckIn = false
-	case 2:
-		scheduledTime = shift.CheckIn2
-		isCheckIn = true
-	case 3:
-		scheduledTime = shift.CheckOut2
-		isCheckIn = false
-	}
-
-	attendanceType := helper.DetermineAttendanceType(currentTime, scheduledTime, isCheckIn)
+	attendanceType := helper.DetermineAttendanceType(currentTime, current.scheduledTime, current.isCheckIn)
 
 	record := model.AttendanceRecord{
 		AttendanceID:   attendance.ID,
@@ -186,12 +193,19 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 		AttendanceType: attendanceType,
 		Reason:         input.Reason,
 		CheckTime:      currentTime,
-		Type:           recordCount + 1, // 1=CheckIn1, 2=CheckOut1, 3=CheckIn2, 4=CheckOut2
+		Type:           current.recordType,
 		Inzone:         inZone,
 	}
 	if err := tx.Create(&record).Error; err != nil {
-		tx.Rollback()
 		return err
+	}
+
+	if recordCount+1 >= maxRecords {
+		if err := tx.Model(&model.Attendance{}).
+			Where("id = ?", attendance.ID).
+			Update("status", "COMPLETE").Error; err != nil {
+			return fmt.Errorf("failed to update attendance status: %w", err)
+		}
 	}
 
 	if err := tx.Commit().Error; err != nil {
@@ -199,6 +213,7 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	}
 	committed = true
 	return nil
+
 }
 
 func applyAccessFilterAttendance(query *gorm.DB, db *gorm.DB, role model.Role, user model.User) *gorm.DB {

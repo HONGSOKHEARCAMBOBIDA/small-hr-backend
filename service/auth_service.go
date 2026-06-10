@@ -241,7 +241,7 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 
 	if len(input.Day) != len(input.CheckIn1) ||
 		len(input.Day) != len(input.CheckOut1) ||
-		len(input.Day) != len(input.IsHalft) ||
+		len(input.Day) != len(input.ShiftType) ||
 		len(input.Day) != len(input.IsDayoff) {
 		return errors.New("shift fields must have equal length")
 	}
@@ -292,7 +292,7 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 			shifts[i] = model.Shift{
 				UserID:    user.ID,
 				Day:       input.Day[i],
-				IsHalft:   input.IsHalft[i],
+				ShiftType: input.ShiftType[i],
 				IsDayoff:  input.IsDayoff[i],
 				CheckIn1:  input.CheckIn1[i],
 				CheckOut1: input.CheckOut1[i],

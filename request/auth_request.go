@@ -20,7 +20,7 @@ type RegisterRequest struct {
 	CheckOut1  []string `json:"check_out1" gorm:"column:check_out1"`
 	CheckIn2   []string `json:"check_in2" gorm:"column:check_in2"`
 	CheckOut2  []string `json:"check_out2" gorm:"column:check_out2"`
-	IsHalft    []bool   `json:"is_halft" gorm:"column:is_halft"`
+	ShiftType  []int    `json:"shift_type" gorm:"column:shift_type"`
 	Day        []int    `json:"day" gorm:"column:day"`
 	IsDayoff   []bool   `json:"is_dayoff" gorm:"column:is_dayoff"`
 }
