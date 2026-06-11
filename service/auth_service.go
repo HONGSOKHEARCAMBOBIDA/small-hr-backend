@@ -112,7 +112,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 
 	resp := &response.AuthResponse{
 		ID:           user.ID,
-		Name:         user.PhoneHash,
+		Name:         user.Name,
 		AccessToken:  accessTokenStr,
 		RefreshToken: refreshTokenStr,
 	}
