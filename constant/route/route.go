@@ -29,7 +29,8 @@ const (
 	EditAttendance = "edit.attendance"
 
 	// Payroll
-	AddPayroll  = "add.payroll"
-	ViewPayroll = "view.payroll"
-	EditPayroll = "edit.payroll"
+	AddPayroll       = "add.payroll"
+	ViewPayroll      = "view.payroll"
+	ViewPayrollDraft = "view.payroll.draft"
+	EditPayroll      = "edit.payroll"
 )

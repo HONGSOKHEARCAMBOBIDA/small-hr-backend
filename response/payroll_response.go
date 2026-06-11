@@ -16,9 +16,6 @@ type PayrollDraftResponse struct {
 	CountUnPaidAttendance []CountUnPaidAttendance `json:"unpaid_attendance"`
 }
 
-// CountUnPaidAttendance holds one unpaid attendance event for this user.
-// Type: 3 = late (ចូលធ្វើការយឺត), 4 = left early (ចេញពីធ្វើការមុនម៉ោង)
 type CountUnPaidAttendance struct {
 	AttendanceID int `json:"attendance_id"`
-	Type         int `json:"type"`
 }
