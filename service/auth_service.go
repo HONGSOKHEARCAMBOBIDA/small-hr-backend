@@ -26,9 +26,11 @@ type AuthService interface {
 	RefreshToken(input request.RefreshTokenRequest, c *gin.Context) (*response.AuthResponse, error)
 	Register(ctx context.Context, input request.RegisterRequest, c *gin.Context, userID int) error
 	GetUser(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.UserResponse, *model.PaginationMetadata, error)
-	ToggleUserStatus(ctx context.Context, userID int, id int) error
+	ToggleUserStatus(ctx context.Context, id int) error
 	ChangePassword(ctx context.Context, userID int, input request.NewPasswordRequest) error
 	UpdateUser(ctx context.Context, input request.UserRequestUpdate, id int) error
+	CountUser(ctx context.Context, id int) (response.UserCount, error)
+	GetRole(ctx context.Context, id int) ([]model.Role, error)
 }
 
 type authservice struct {
@@ -428,7 +430,7 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 	return users, helper.BuildPaginationMeta(pf, totalCount), nil
 }
 
-func (s *authservice) ToggleUserStatus(ctx context.Context, userID int, id int) error {
+func (s *authservice) ToggleUserStatus(ctx context.Context, id int) error {
 	result := s.db.WithContext(ctx).Model(&model.User{}).Where("id =?", id).Update("is_active", gorm.Expr("NOT is_active"))
 	if result.Error != nil {
 		return result.Error
@@ -473,4 +475,43 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 		return result.Error
 	}
 	return nil
+}
+
+func (s *authservice) CountUser(ctx context.Context, id int) (response.UserCount, error) {
+	var countUser response.UserCount
+	var user model.User
+	if err := s.db.WithContext(ctx).Preload("Role").First(&user, id).Error; err != nil {
+		return response.UserCount{}, err
+	}
+
+	userQuery := s.db.WithContext(ctx).
+		Table("user u").
+		Select(`
+            COUNT(DISTINCT CASE WHEN u.is_active = '1' THEN u.id END) AS total
+        `)
+
+	userQuery = helper.ApplyAccessFilter(userQuery, s.db, user.Role, user)
+	if err := userQuery.Scan(&countUser).Error; err != nil {
+		return response.UserCount{}, err
+	}
+	return countUser, nil
+}
+
+func (s *authservice) GetRole(ctx context.Context, id int) ([]model.Role, error) {
+	var role []model.Role
+	var user model.User
+	if err := s.db.WithContext(ctx).Preload("Role").First(&user, id).Error; err != nil {
+		return nil, err
+	}
+	roleQuery := s.db.WithContext(ctx).Table("role r").
+		Select(`
+		 r.id AS id,
+		 r.display_name AS display_name
+	`)
+	roleQuery = helper.ApplyAccessGetRole(roleQuery, s.db, user.Role, user)
+
+	if err := roleQuery.Scan(&role).Error; err != nil {
+		return nil, err
+	}
+	return role, nil
 }

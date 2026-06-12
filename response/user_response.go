@@ -20,3 +20,7 @@ type UserResponse struct {
 	IsVerify      bool            `json:"is_verify" gorm:"column:is_verify"`
 	ShiftResponse []ShiftResponse `json:"shift_response" gorm:"-"`
 }
+
+type UserCount struct {
+	Total int `json:"total"`
+}

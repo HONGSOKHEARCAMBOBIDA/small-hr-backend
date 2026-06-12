@@ -18,6 +18,7 @@ const (
 	EditUser         = "edit.user/:id"
 	ToggleUserStatus = "toggle.status.user/:id"
 	ChangePassword   = "change.password"
+	CountUser        = "count.user"
 
 	// Shift
 	EditShift = "edit.shift"
@@ -33,4 +34,7 @@ const (
 	ViewPayroll      = "view.payroll"
 	ViewPayrollDraft = "view.payroll.draft"
 	EditPayroll      = "edit.payroll"
+
+	// Role
+	ViewRole = "view.role"
 )

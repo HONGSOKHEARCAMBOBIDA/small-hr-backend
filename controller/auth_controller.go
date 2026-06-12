@@ -119,18 +119,13 @@ func (cr *AuthController) GetUser(c *gin.Context) {
 }
 
 func (cr *AuthController) ToggleUserStatus(c *gin.Context) {
-	userID, ok := helper.GetUserID(c)
-	if !ok {
-		share.ResponseError(c, http.StatusUnauthorized, "please login")
-		return
-	}
 	idparam := c.Param("id")
 	id, err := strconv.Atoi(idparam)
 	if err != nil {
 		share.ResponseError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := cr.service.ToggleUserStatus(c, userID, id); err != nil {
+	if err := cr.service.ToggleUserStatus(c, id); err != nil {
 		share.ResponseError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -172,4 +167,32 @@ func (cr *AuthController) UpdateUser(c *gin.Context) {
 		return
 	}
 	share.ResponseSuccess(c, http.StatusOK, "updated user")
+}
+
+func (cr *AuthController) CountUser(c *gin.Context) {
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
+	data, err := cr.service.CountUser(c, userID)
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.RespondDate(c, http.StatusOK, data)
+}
+
+func (cr *AuthController) GetRole(c *gin.Context) {
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
+	data, err := cr.service.GetRole(c, userID)
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.RespondDate(c, http.StatusOK, data)
 }
