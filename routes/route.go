@@ -47,5 +47,6 @@ func SetupRoutes(r *gin.Engine) {
 		// Payroll
 		auth.GET(route.ViewPayrollDraft, middleware.PermissionMiddleware(permission.ViewPayroll), payrollcontroller.GetDraftPayroll)
 		auth.POST(route.AddPayroll, middleware.PermissionMiddleware(permission.AddPayroll), payrollcontroller.CreatePayroll)
+		auth.GET(route.ViewPayroll, middleware.PermissionMiddleware(permission.ViewPayroll), payrollcontroller.GetPayroll)
 	}
 }

@@ -67,6 +67,17 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	}
 	utils.Redis.Del(utils.Ctx, key)
 
+	var permissions []model.Permission
+	if err := s.db.Table("permission p").
+		Select("p.id AS id, p.name AS name").
+		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
+		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
+			"add.payroll",
+		}).
+		Scan(&permissions).Error; err != nil {
+		return nil, err
+	}
+
 	accessExpiry := time.Now().Add(60 * time.Minute)
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
@@ -117,6 +128,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		Name:         user.Name,
 		AccessToken:  accessTokenStr,
 		RefreshToken: refreshTokenStr,
+		Permissions:  permissions,
 	}
 
 	return resp, nil
