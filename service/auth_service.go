@@ -288,25 +288,18 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 		return err
 	}
 
-	if len(input.Day) > 0 {
-		shifts := make([]model.Shift, len(input.Day))
-		for i := range input.Day {
-			shifts[i] = model.Shift{
-				UserID:    user.ID,
-				Day:       input.Day[i],
-				ShiftType: input.ShiftType[i],
-				IsDayoff:  input.IsDayoff[i],
-				CheckIn1:  input.CheckIn1[i],
-				CheckOut1: input.CheckOut1[i],
-			}
-			if i < len(input.CheckIn2) {
-				shifts[i].CheckIn2 = input.CheckIn2[i]
-			}
-			if i < len(input.CheckOut2) {
-				shifts[i].CheckOut2 = input.CheckOut2[i]
-			}
+	for i, day := range input.Day {
+		shift := model.Shift{
+			UserID:    user.ID,
+			Day:       day,
+			ShiftType: input.ShiftType[i],
+			IsDayoff:  input.IsDayoff[i],
+			CheckIn1:  input.CheckIn1[i],
+			CheckOut1: input.CheckOut1[i],
+			CheckIn2:  input.CheckIn2[i],
+			CheckOut2: input.CheckOut2[i],
 		}
-		if err := tx.Create(&shifts).Error; err != nil {
+		if err := tx.Create(&shift).Error; err != nil {
 			return err
 		}
 	}
@@ -319,8 +312,10 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 }
 
 func applyAccessFilter(query *gorm.DB, db *gorm.DB, role model.Role, user model.User) *gorm.DB {
-	if role.Level < 7 {
+	if role.Level > 1 && role.Level < 7 {
 		return query.Where("u.company_id = ?", user.CompanyID)
+	} else if role.Level <= 1 {
+		return query.Where("u.id =?", user.ID)
 	}
 	return query
 }

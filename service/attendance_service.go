@@ -141,30 +141,30 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	switch shift.ShiftType {
 
 	case 2:
-		if shift.CheckIn1 == "" || shift.CheckOut1 == "" {
+		if shift.CheckIn1 == nil || shift.CheckOut1 == nil {
 			return errors.New("ធ្វេីការវែនព្រឹកតែមិនទាន់ដាក់ម៉ោងចេញចូល")
 		}
 		sessions = []sessionConfig{
-			{scheduledTime: shift.CheckIn1, isCheckIn: true, recordType: 1},
-			{scheduledTime: shift.CheckOut1, isCheckIn: false, recordType: 2},
+			{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: 1},
+			{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: 2},
 		}
 	case 3:
-		if shift.CheckIn2 == "" || shift.CheckOut2 == "" {
+		if shift.CheckIn2 == nil || shift.CheckOut2 == nil {
 			return errors.New("ធ្វេីការវែនល្ងាចតែមិនទាន់ដាក់ម៉ោងចេញចូល")
 		}
 		sessions = []sessionConfig{
-			{scheduledTime: shift.CheckIn2, isCheckIn: true, recordType: 3},
-			{scheduledTime: shift.CheckOut2, isCheckIn: false, recordType: 4},
+			{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: 3},
+			{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: 4},
 		}
 	default:
-		if shift.CheckIn1 == "" || shift.CheckOut1 == "" || shift.CheckIn2 == "" || shift.CheckOut2 == "" {
+		if shift.CheckIn1 == nil || shift.CheckOut1 == nil || shift.CheckIn2 == nil || shift.CheckOut2 == nil {
 			return errors.New("គ្មានម៉ោងធ្វេីការ")
 		}
 		sessions = []sessionConfig{
-			{scheduledTime: shift.CheckIn1, isCheckIn: true, recordType: 1},
-			{scheduledTime: shift.CheckOut1, isCheckIn: false, recordType: 2},
-			{scheduledTime: shift.CheckIn2, isCheckIn: true, recordType: 3},
-			{scheduledTime: shift.CheckOut2, isCheckIn: false, recordType: 4},
+			{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: 1},
+			{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: 2},
+			{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: 3},
+			{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: 4},
 		}
 	}
 
@@ -217,12 +217,12 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 }
 
 func applyAccessFilterAttendance(query *gorm.DB, db *gorm.DB, role model.Role, user model.User) *gorm.DB {
-	if role.Level < 7 {
+	if role.Level > 1 && role.Level < 7 {
 		return query.Where("u.company_id = ?", user.CompanyID)
-	}
-	if role.Level == 1 {
+	} else if role.Level <= 1 {
 		return query.Where("u.id =?", user.ID)
 	}
+
 	return query
 }
 

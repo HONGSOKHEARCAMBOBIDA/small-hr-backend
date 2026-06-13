@@ -58,10 +58,10 @@ func (s *shiftservice) CreateShift(ctx context.Context, input request.ShiftReque
 		for _, shift := range input.Shifts {
 			newShift := model.Shift{
 				UserID:    *shift.UserID,
-				CheckIn1:  *shift.CheckIn1,
-				CheckOut1: *shift.CheckOut1,
-				CheckIn2:  *shift.CheckIn2,
-				CheckOut2: *shift.CheckOut2,
+				CheckIn1:  shift.CheckIn1,
+				CheckOut1: shift.CheckOut1,
+				CheckIn2:  shift.CheckIn2,
+				CheckOut2: shift.CheckOut2,
 				ShiftType: *shift.ShiftType,
 				Day:       *shift.Day,
 				IsDayoff:  *shift.IsDayoff,

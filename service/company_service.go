@@ -44,11 +44,14 @@ func (s *companyservice) GetCompany(id int, ctx context.Context, pf request.Pagi
 		c.longitude AS longitude,
 		c.radius AS radius,
 		c.bot_token AS bot_token,
-		c.group_chatID AS group_chatID
-	`).Joins("LEFT JOIN user u ON u.company_id = c.id").Order("id DESC")
+		c.group_chatID AS group_chatID,
+		c.currency AS currency,
+		c.late_penalty AS late_penalty,
+		c.left_early_penalty AS left_early_penalty
+	`)
 
 	if user.Role.Level < 7 {
-		query = query.Where("u.company_id = ?", user.CompanyID)
+		query = query.Where("c.id = ?", user.CompanyID)
 	}
 
 	if err := query.Count(&totalCount).Error; err != nil {
@@ -137,9 +140,6 @@ func (s *companyservice) UpdateCompany(ctx context.Context, id int, input reques
 	result := s.db.WithContext(ctx).Model(&model.Company{}).Where("id =?", id).Updates(updates)
 	if result.Error != nil {
 		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return errors.New("no data change")
 	}
 	return nil
 }

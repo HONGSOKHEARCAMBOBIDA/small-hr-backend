@@ -53,3 +53,41 @@ func (cr *PayrollController) CreatePayroll(c *gin.Context) {
 	}
 	share.ResponseSuccess(c, http.StatusOK, "payroll create")
 }
+
+func (cr *PayrollController) GetPayroll(c *gin.Context) {
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
+
+	filter := map[string]string{
+		"name":         c.Query("name"),
+		"payroll_date": c.Query("payroll_date"),
+		"payroll_type": c.Query("payroll_type"),
+	}
+
+	payrolls, metadata, err := cr.service.GetPayroll(c, userID, request.Pagination{
+		Page:     page,
+		PageSize: pageSize,
+	}, filter)
+
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"data":       payrolls,
+		"pagination": metadata,
+	})
+}
