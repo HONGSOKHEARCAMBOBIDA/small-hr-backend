@@ -208,6 +208,62 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 		}
 	}
 
+	workTime := fmt.Sprintf("%s", current.scheduledTime)
+	lateText := ""
+
+	switch attendanceType {
+	case 1:
+		lateText = "🟢 ចូលធ្វើការមុនម៉ោង"
+	case 2:
+		lateText = "🤭 ចូលធ្វើការទាន់ម៉ោង"
+	case 3:
+		lateText = "🔴 ចូលធ្វើការយឺត"
+	case 4:
+		lateText = "🤫 ចេញពីធ្វើការមុនម៉ោង"
+	case 5:
+		lateText = "😴 ចេញពីធ្វើការត្រឹមម៉ោង"
+	case 6:
+		lateText = "😓 ចេញពីធ្វើការក្រោយម៉ោង"
+	}
+
+	zoneText := "📍 ស្កែនក្នុងតំបន់ក្រុមហ៊ុន"
+	if !inZone {
+		zoneText = "⚠️ ស្កែនក្រៅតំបន់ក្រុមហ៊ុន"
+	}
+
+	checktype := ""
+	switch current.recordType {
+	case 1:
+		checktype = "ចូលធ្វេីការវែនទី១"
+	case 2:
+		checktype = "ចេញពីធ្វេីការវែនទី១"
+	case 3:
+		checktype = "ចូលធ្វេីការវែនទី២"
+	case 4:
+		checktype = "ចេញពីធ្វេីការវែនទី២"
+	default:
+		return fmt.Errorf("unknown record type: %d", current.recordType)
+	}
+	message := fmt.Sprintf(
+		"<b>%s</b>\n\n"+
+			"👤 ឈ្មោះ: %s\n"+
+			"🏢 សាខា: %s\n"+
+			"🕒 ម៉ោងត្រូវស្កែន: %s\n"+
+			"🕒 ម៉ោងបានស្កែន: %s\n"+
+			"%s\n"+
+			"%s\n"+
+			"មូលហេតុ: %s\n",
+		checktype,
+		user.Name,
+		user.Company.Name,
+		workTime,
+		now.Format("15:04:05"),
+		lateText,
+		zoneText,
+		input.Reason,
+	)
+	go helper.SendTelegramMessage(message, *user.Company.GroupChatID, *user.Company.BotToken)
+
 	if err := tx.Commit().Error; err != nil {
 		return err
 	}
@@ -268,6 +324,8 @@ func (s *attendanceservice) GetAttendance(ctx context.Context, id int, pf reques
 		Joins("LEFT JOIN user u ON u.id = a.user_id").
 		Joins("LEFT JOIN company c ON c.id = u.company_id").
 		Joins("LEFT JOIN role r ON r.id = u.role_id")
+
+	attendancequery = attendancequery.Order("a.id DESC")
 
 	attendancequery = applyAccessFilterAttendance(attendancequery, s.db, user.Role, user)
 	attendancequery = applyCommonFilterAttendance(attendancequery, filter)
