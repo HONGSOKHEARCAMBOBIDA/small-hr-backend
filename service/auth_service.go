@@ -160,10 +160,43 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 
 func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*response.AuthResponse, error) {
 	var user model.User
-	if err := s.db.
+	if err := s.db.Select("id,qr_token,password_hash,is_active,role_id").
 		Where("qr_token = ? AND is_active = 1", input.QrToken).
 		First(&user).Error; err != nil {
 		return nil, errors.New("ព័ត៌មានមិនត្រឹមត្រូវ ឬ អ្នកប្រើប្រាស់ត្រូវបានបិទគណនី")
+	}
+
+	var permissions []model.Permission
+	if err := s.db.Table("permission p").
+		Select("p.id AS id, p.name AS name").
+		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
+		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
+			"add.payroll",
+		}).
+		Scan(&permissions).Error; err != nil {
+		return nil, err
+	}
+
+	var settings []model.Setting
+	if err := s.db.Where("`key` IN ?", []string{
+		"ACCESS_TOKEN_EXPIRE_HOURS",
+		"REFRESH_TOKEN_EXPIRE_DAYS",
+	}).Find(&settings).Error; err != nil {
+		return nil, errors.New("Setting Not Found")
+	}
+
+	settingMap := make(map[string]string)
+	for _, s := range settings {
+		settingMap[s.Key] = s.Value
+	}
+
+	accesstoken, err := strconv.Atoi(settingMap["ACCESS_TOKEN_EXPIRE_HOURS"])
+	if err != nil {
+		return nil, errors.New("Bad request")
+	}
+	refreshtoken, err := strconv.Atoi(settingMap["REFRESH_TOKEN_EXPIRE_DAYS"])
+	if err != nil {
+		return nil, errors.New("Bad request")
 	}
 
 	newQrToken := utils.GenerateQRToken()
@@ -173,7 +206,7 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		return nil, fmt.Errorf("failed to rotate qr token: %w", err)
 	}
 
-	accessExpiry := time.Now().Add(60 * time.Minute)
+	accessExpiry := time.Now().Add(time.Duration(accesstoken) * time.Hour)
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"phone":   user.PhoneHash,
@@ -213,7 +246,7 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		UserID:       uint(user.ID),
 		RefreshToken: string(hashedRefresh),
 		TokenPrefix:  tokenPrefix,
-		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
+		ExpiresAt:    time.Now().Add(time.Duration(refreshtoken) * 24 * time.Hour),
 	}
 	if err := s.db.Create(&session).Error; err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
@@ -224,6 +257,7 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		Name:         user.Name,
 		AccessToken:  accessTokenStr,
 		RefreshToken: refreshTokenStr,
+		Permissions:  permissions,
 	}
 
 	return resp, nil
@@ -421,6 +455,11 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 			return nil, nil, err
 		}
 		users[i].BaseSalary = decrypted
+		phonedecript, err := helper.DecryptPhone(users[i].PhoneHash)
+		if err != nil {
+			return nil, nil, err
+		}
+		users[i].PhoneHash = phonedecript
 
 	}
 
@@ -494,7 +533,11 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 	updates := map[string]interface{}{}
 
 	if input.PhoneHash != nil {
-		updates["phone_hash"] = *input.PhoneHash
+		phoneencript, err := helper.EncryptPhone(*input.PhoneHash)
+		if err != nil {
+			return err
+		}
+		updates["phone_hash"] = phoneencript
 	}
 	if input.RoleID != nil {
 		updates["role_id"] = *input.RoleID
