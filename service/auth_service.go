@@ -6,12 +6,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
+	"log/slog"
 	"mysql/config"
 	"mysql/helper"
 	"mysql/model"
 	"mysql/request"
 	"mysql/response"
 	"mysql/utils"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -50,11 +53,32 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		return nil, errors.New("អ្នកព្យាយាមចូលច្រើនពេក សូមព្យាយាមម្តងទៀតក្រោយ 10 នាទី")
 	}
 	var user model.User
-	if err := s.db.
-		Where("phone_hash = ? AND is_active = 1",
-			input.Phone).
+	if err := s.db.Select("id, phone_hash, password_hash, role_id, is_active, name, qr_token, is_verify").
+		Where("phone_hash = ? AND is_active = 1", input.Phone).
 		First(&user).Error; err != nil {
 		return nil, errors.New("ព័ត៌មានមិនត្រឹមត្រូវ ឬ អ្នកប្រើប្រាស់ត្រូវបានបិទគណនី")
+	}
+
+	var settings []model.Setting
+	if err := s.db.Where("`key` IN ?", []string{
+		"ACCESS_TOKEN_EXPIRE_HOURS",
+		"REFRESH_TOKEN_EXPIRE_DAYS",
+	}).Find(&settings).Error; err != nil {
+		return nil, errors.New("Setting Not Found")
+	}
+
+	settingMap := make(map[string]string)
+	for _, s := range settings {
+		settingMap[s.Key] = s.Value
+	}
+
+	accesstoken, err := strconv.Atoi(settingMap["ACCESS_TOKEN_EXPIRE_HOURS"])
+	if err != nil {
+		return nil, errors.New("Bad request")
+	}
+	refreshtoken, err := strconv.Atoi(settingMap["REFRESH_TOKEN_EXPIRE_DAYS"])
+	if err != nil {
+		return nil, errors.New("Bad request")
 	}
 
 	if err := bcrypt.CompareHashAndPassword(
@@ -78,7 +102,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		return nil, err
 	}
 
-	accessExpiry := time.Now().Add(60 * time.Minute)
+	accessExpiry := time.Now().Add(time.Duration(accesstoken) * time.Hour)
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"phone":   user.PhoneHash,
@@ -117,7 +141,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		UserID:       uint(user.ID),
 		RefreshToken: string(hashedRefresh),
 		TokenPrefix:  tokenPrefix,
-		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
+		ExpiresAt:    time.Now().Add(time.Duration(refreshtoken) * 24 * time.Hour),
 	}
 	if err := s.db.Create(&session).Error; err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
@@ -391,6 +415,13 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 
 	for i := range users {
 		users[i].GenderString = helper.Gender(users[i].Gender)
+		decrypted, err := helper.DecryptSalary(users[i].BaseSalary)
+		if err != nil {
+			log.Printf(err.Error())
+			return nil, nil, err
+		}
+		users[i].BaseSalary = decrypted
+
 	}
 
 	if len(users) == 0 {
@@ -475,11 +506,17 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 		updates["gender"] = *input.Gender
 	}
 	if input.BaseSalary != nil {
-		updates["base_salary"] = *input.BaseSalary
+		encrypted, err := helper.EncryptSalary(*input.BaseSalary)
+		if err != nil {
+			return err
+		}
+		updates["base_salary"] = encrypted
 	}
 	result := s.db.WithContext(ctx).Model(&model.User{}).Where("id =?", id).Updates(updates)
 	if result.Error != nil {
+		slog.Error("failed to create payroll", "error", result.Error)
 		return result.Error
+
 	}
 	return nil
 }
