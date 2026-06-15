@@ -77,3 +77,18 @@ func (cr *AttendanceController) GetAttendance(c *gin.Context) {
 		"pagination": metadata,
 	})
 }
+
+func (cr *AttendanceController) GetAttendanceDraft(c *gin.Context) {
+
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
+	data, err := cr.service.GetAttendanceDraft(c, userID)
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.RespondDate(c, http.StatusOK, data)
+}

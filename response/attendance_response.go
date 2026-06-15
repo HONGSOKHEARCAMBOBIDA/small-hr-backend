@@ -14,3 +14,9 @@ type AttendanceResponse struct {
 	Status                   string                     `json:"status"`
 	AttendanceRecordResponse []AttendanceRecordResponse `json:"attendance_record" gorm:"-"`
 }
+
+type AttendanceResponseDraft struct {
+	Type          int    `json:"type"`
+	TypeString    string `json:"type_string"`
+	ScheduledTime string `json:"scheduled_time"`
+}

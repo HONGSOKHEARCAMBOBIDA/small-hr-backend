@@ -19,6 +19,7 @@ import (
 type AttendanceService interface {
 	CreateAttendance(ctx context.Context, id int, input request.AttendanceRequestCreate) error
 	GetAttendance(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.AttendanceResponse, *model.PaginationMetadata, error)
+	GetAttendanceDraft(ctx context.Context, id int) (response.AttendanceResponseDraft, error)
 }
 
 type attendanceservice struct {
@@ -270,6 +271,105 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	committed = true
 	return nil
 
+}
+
+func (s *attendanceservice) GetAttendanceDraft(ctx context.Context, id int) (response.AttendanceResponseDraft, error) {
+	now := time.Now()
+	currentDate := now.Format("2006-01-02")
+	dayofweek := helper.GetCurrentDay()
+
+	var user model.User
+	if err := s.db.WithContext(ctx).Select("id").First(&user, id).Error; err != nil {
+		return response.AttendanceResponseDraft{}, fmt.Errorf("user not found: %w", err)
+	}
+
+	var shift model.Shift
+	if err := s.db.WithContext(ctx).Where("user_id = ? AND day = ?", user.ID, dayofweek).First(&shift).Error; err != nil {
+		return response.AttendanceResponseDraft{}, fmt.Errorf("shift not found: %w", err)
+	}
+
+	if shift.IsDayoff {
+		return response.AttendanceResponseDraft{}, errors.New("today is a day off")
+	}
+
+	var attendance model.Attendance
+	var existingRecords []model.AttendanceRecord
+
+	err := s.db.WithContext(ctx).Where("user_id = ? AND check_date = ?", user.ID, currentDate).First(&attendance).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return response.AttendanceResponseDraft{}, fmt.Errorf("failed to load attendance: %w", err)
+	}
+	if err == nil {
+		if err := s.db.WithContext(ctx).Where("attendance_id = ?", attendance.ID).
+			Order("id ASC").
+			Find(&existingRecords).Error; err != nil {
+			return response.AttendanceResponseDraft{}, fmt.Errorf("failed to load attendance records: %w", err)
+		}
+	}
+
+	type sessionConfig struct {
+		scheduledTime string
+		isCheckIn     bool
+		recordType    int
+	}
+
+	var sessions []sessionConfig
+
+	switch shift.ShiftType {
+	case 2:
+		if shift.CheckIn1 == nil || shift.CheckOut1 == nil {
+			return response.AttendanceResponseDraft{}, errors.New("shift type 2: CheckIn1 or CheckOut1 is not configured")
+		}
+		sessions = []sessionConfig{
+			{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: 1},
+			{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: 2},
+		}
+	case 3:
+		if shift.CheckIn2 == nil || shift.CheckOut2 == nil {
+			return response.AttendanceResponseDraft{}, errors.New("shift type 3: CheckIn2 or CheckOut2 is not configured")
+		}
+		sessions = []sessionConfig{
+			{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: 3},
+			{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: 4},
+		}
+	default:
+		if shift.CheckIn1 == nil || shift.CheckOut1 == nil || shift.CheckIn2 == nil || shift.CheckOut2 == nil {
+			return response.AttendanceResponseDraft{}, errors.New("shift: one or more check-in/out times are not configured")
+		}
+		sessions = []sessionConfig{
+			{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: 1},
+			{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: 2},
+			{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: 3},
+			{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: 4},
+		}
+	}
+
+	recordCount := len(existingRecords)
+	if recordCount >= len(sessions) {
+		return response.AttendanceResponseDraft{}, errors.New("all attendance sessions for today have already been recorded")
+	}
+
+	current := sessions[recordCount]
+
+	var checktype string
+	switch current.recordType {
+	case 1:
+		checktype = "ចូលធ្វេីការវែនទី១"
+	case 2:
+		checktype = "ចេញពីធ្វេីការវែនទី១"
+	case 3:
+		checktype = "ចូលធ្វេីការវែនទី២"
+	case 4:
+		checktype = "ចេញពីធ្វេីការវែនទី២"
+	default:
+		return response.AttendanceResponseDraft{}, fmt.Errorf("unknown record type: %d", current.recordType)
+	}
+
+	return response.AttendanceResponseDraft{
+		Type:          current.recordType,
+		TypeString:    checktype,
+		ScheduledTime: current.scheduledTime,
+	}, nil
 }
 
 func applyAccessFilterAttendance(query *gorm.DB, db *gorm.DB, role model.Role, user model.User) *gorm.DB {

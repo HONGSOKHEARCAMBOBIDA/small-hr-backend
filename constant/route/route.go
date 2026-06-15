@@ -25,9 +25,10 @@ const (
 	AddShift  = "add.shift"
 
 	// Attendance
-	AddAttendance  = "add.attendance"
-	ViewAttendance = "view.attendance"
-	EditAttendance = "edit.attendance"
+	AddAttendance       = "add.attendance"
+	ViewAttendance      = "view.attendance"
+	ViewAttendanceDraft = "view.attendance.draft"
+	EditAttendance      = "edit.attendance"
 
 	// Payroll
 	AddPayroll       = "add.payroll"

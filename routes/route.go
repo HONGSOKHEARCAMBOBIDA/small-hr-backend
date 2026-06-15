@@ -16,10 +16,15 @@ func SetupRoutes(r *gin.Engine) {
 	attendancecontroller := controller.NewAttendanceController()
 	payrollcontroller := controller.NewPayrollController()
 	r.Static("/clientimage", "./public/clientimage")
-	r.POST(route.Login, authcontroller.Login)
-	r.POST(route.LoginByQr, authcontroller.LoginByQr)
-	r.POST(route.Refresh, authcontroller.Refresh)
+	public := r.Group("/")
+	public.Use(middleware.APIKeyAuth())
+	{
+		public.POST(route.Login, authcontroller.Login)
+		public.POST(route.LoginByQr, authcontroller.LoginByQr)
+		public.POST(route.Refresh, authcontroller.Refresh)
+	}
 	auth := r.Group("/")
+	auth.Use(middleware.APIKeyAuth())
 	auth.Use(middleware.AuthMiddleware())
 	{
 		// Company
@@ -43,6 +48,7 @@ func SetupRoutes(r *gin.Engine) {
 		// Attendance
 		auth.POST(route.AddAttendance, middleware.PermissionMiddleware(permission.AddAttendance), attendancecontroller.CreateAttendance)
 		auth.GET(route.ViewAttendance, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendance)
+		auth.GET(route.ViewAttendanceDraft, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendanceDraft)
 
 		// Payroll
 		auth.GET(route.ViewPayrollDraft, middleware.PermissionMiddleware(permission.ViewPayroll), payrollcontroller.GetDraftPayroll)

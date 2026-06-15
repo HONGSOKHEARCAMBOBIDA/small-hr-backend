@@ -163,7 +163,7 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 
 	qrtokenhash := helper.HashQrtoken(input.QrToken)
 	var user model.User
-	if err := s.db.Select("id,qr_token,is_active,role_id").
+	if err := s.db.Select("id,qr_token,is_active,role_id,name").
 		Where("qr_token = ? AND is_active = 1", qrtokenhash).
 		First(&user).Error; err != nil {
 		return nil, errors.New("ព័ត៌មានមិនត្រឹមត្រូវ ឬ អ្នកប្រើប្រាស់ត្រូវបានបិទគណនី")
@@ -203,13 +203,17 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 	}
 
 	newQrToken := utils.GenerateQRToken()
-	qrTokenEncript := helper.HashQrtoken(newQrToken)
+	qrTokenHash := helper.HashQrtoken(newQrToken)
+	qrTokenEncript, err := helper.EncryptQRTOKEN(newQrToken)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.db.Model(&model.User{}).
 		Where("id = ?", user.ID).
-		Update("qr_token", qrTokenEncript).Error; err != nil {
+		Updates(map[string]interface{}{
+			"qr_token":         qrTokenHash,
+			"qr_token_encript": qrTokenEncript,
+		}).Error; err != nil {
 		return nil, fmt.Errorf("failed to rotate qr token: %w", err)
 	}
 
@@ -335,7 +339,11 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 	}
 	passwordHash := utils.HasPassword("12345678")
 	qrToken := utils.GenerateQRToken()
-	qrTokenEncript := helper.HashQrtoken(qrToken)
+	qrTokenHash := helper.HashQrtoken(qrToken)
+	qrTokenEncript, err := helper.EncryptQRTOKEN(qrToken)
+	if err != nil {
+		return err
+	}
 	if err != nil {
 		return err
 	}
@@ -358,17 +366,18 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 	}()
 
 	user := model.User{
-		PhoneHash:    helper.HashPhone(input.PhoneHash),
-		PhoneEncript: PhoneEncript,
-		PasswordHash: passwordHash,
-		RoleID:       input.RoleID,
-		IsActive:     true,
-		Name:         input.Name,
-		Gender:       input.Gender,
-		BaseSalary:   input.BaseSalary,
-		CompanyID:    companyID,
-		QrToken:      qrTokenEncript,
-		IsVerify:     false,
+		PhoneHash:      helper.HashPhone(input.PhoneHash),
+		PhoneEncript:   PhoneEncript,
+		PasswordHash:   passwordHash,
+		RoleID:         input.RoleID,
+		IsActive:       true,
+		Name:           input.Name,
+		Gender:         input.Gender,
+		BaseSalary:     input.BaseSalary,
+		CompanyID:      companyID,
+		QrToken:        qrTokenHash,
+		IsVerify:       false,
+		QrTokenEncript: qrTokenEncript,
 	}
 	if err := tx.Create(&user).Error; err != nil {
 		return err
@@ -443,7 +452,7 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
             u.base_salary AS base_salary,
             c.id AS company_id,
             c.name AS company_name,
-            u.qr_token AS qr_token,
+            u.qr_token_encript AS qr_token,
             u.is_verify AS is_verify,
 			c.currency AS currency
         `).
@@ -476,6 +485,11 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 			return nil, nil, err
 		}
 		users[i].PhoneHash = phonedecript
+		qrtokendecript, err := helper.DecryptQRTOKEN(users[i].QrToken)
+		if err != nil {
+			return nil, nil, err
+		}
+		users[i].QrToken = qrtokendecript
 	}
 
 	if len(users) == 0 {
@@ -555,6 +569,11 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 		}
 		updates["phone_encrypted"] = PhoneEncript
 		updates["qr_token"] = helper.HashQrtoken(*input.PhoneHash)
+		qrencript, err := helper.EncryptQRTOKEN(*input.PhoneHash)
+		if err != nil {
+			return err
+		}
+		updates["qr_token_encript"] = qrencript
 	}
 	if input.RoleID != nil {
 		updates["role_id"] = *input.RoleID
