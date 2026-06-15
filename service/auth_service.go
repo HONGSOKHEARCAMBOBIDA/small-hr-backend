@@ -52,9 +52,10 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	if attempts >= 5 {
 		return nil, errors.New("អ្នកព្យាយាមចូលច្រើនពេក សូមព្យាយាមម្តងទៀតក្រោយ 10 នាទី")
 	}
+	phonehash := helper.HashPhone(input.Phone)
 	var user model.User
 	if err := s.db.Select("id, phone_hash, password_hash, role_id, is_active, name, qr_token, is_verify").
-		Where("phone_hash = ? AND is_active = 1", input.Phone).
+		Where("phone_hash = ? AND is_active = 1", phonehash).
 		First(&user).Error; err != nil {
 		return nil, errors.New("ព័ត៌មានមិនត្រឹមត្រូវ ឬ អ្នកប្រើប្រាស់ត្រូវបានបិទគណនី")
 	}
@@ -159,9 +160,11 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 }
 
 func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*response.AuthResponse, error) {
+
+	qrtokenhash := helper.HashQrtoken(input.QrToken)
 	var user model.User
-	if err := s.db.Select("id,qr_token,password_hash,is_active,role_id").
-		Where("qr_token = ? AND is_active = 1", input.QrToken).
+	if err := s.db.Select("id,qr_token,is_active,role_id").
+		Where("qr_token = ? AND is_active = 1", qrtokenhash).
 		First(&user).Error; err != nil {
 		return nil, errors.New("ព័ត៌មានមិនត្រឹមត្រូវ ឬ អ្នកប្រើប្រាស់ត្រូវបានបិទគណនី")
 	}
@@ -200,9 +203,13 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 	}
 
 	newQrToken := utils.GenerateQRToken()
+	qrTokenEncript := helper.HashQrtoken(newQrToken)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.db.Model(&model.User{}).
 		Where("id = ?", user.ID).
-		Update("qr_token", newQrToken).Error; err != nil {
+		Update("qr_token", qrTokenEncript).Error; err != nil {
 		return nil, fmt.Errorf("failed to rotate qr token: %w", err)
 	}
 
@@ -322,8 +329,16 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 	if err := s.db.WithContext(ctx).First(&usrlog, userID).Error; err != nil {
 		return err
 	}
+	PhoneEncript, err := helper.EncryptPhone(input.PhoneHash)
+	if err != nil {
+		return err
+	}
 	passwordHash := utils.HasPassword("12345678")
 	qrToken := utils.GenerateQRToken()
+	qrTokenEncript := helper.HashQrtoken(qrToken)
+	if err != nil {
+		return err
+	}
 	companyID := input.CompanyID
 	if companyID == 0 {
 		companyID = usrlog.CompanyID
@@ -343,7 +358,8 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 	}()
 
 	user := model.User{
-		PhoneHash:    input.PhoneHash,
+		PhoneHash:    helper.HashPhone(input.PhoneHash),
+		PhoneEncript: PhoneEncript,
 		PasswordHash: passwordHash,
 		RoleID:       input.RoleID,
 		IsActive:     true,
@@ -351,7 +367,7 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 		Gender:       input.Gender,
 		BaseSalary:   input.BaseSalary,
 		CompanyID:    companyID,
-		QrToken:      qrToken,
+		QrToken:      qrTokenEncript,
 		IsVerify:     false,
 	}
 	if err := tx.Create(&user).Error; err != nil {
@@ -418,7 +434,7 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 	userquery := s.db.WithContext(ctx).Table("user u").
 		Select(`
             u.id AS id,
-            u.phone_hash AS phone_hash,
+            u.phone_encrypted AS phone_hash,
             r.id AS role_id,
             r.display_name AS role_name,
             u.is_active AS is_active,
@@ -460,7 +476,6 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 			return nil, nil, err
 		}
 		users[i].PhoneHash = phonedecript
-
 	}
 
 	if len(users) == 0 {
@@ -533,11 +548,13 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 	updates := map[string]interface{}{}
 
 	if input.PhoneHash != nil {
-		phoneencript, err := helper.EncryptPhone(*input.PhoneHash)
+		updates["phone_hash"] = helper.HashPhone(*input.PhoneHash)
+		PhoneEncript, err := helper.EncryptPhone(*input.PhoneHash)
 		if err != nil {
 			return err
 		}
-		updates["phone_hash"] = phoneencript
+		updates["phone_encrypted"] = PhoneEncript
+		updates["qr_token"] = helper.HashQrtoken(*input.PhoneHash)
 	}
 	if input.RoleID != nil {
 		updates["role_id"] = *input.RoleID

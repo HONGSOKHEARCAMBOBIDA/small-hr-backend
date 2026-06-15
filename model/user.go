@@ -5,6 +5,7 @@ import "mysql/model/base"
 type User struct {
 	base.ModelBase
 	PhoneHash    string `json:"phone_hash" gorm:"column:phone_hash"`
+	PhoneEncript string `json:"phone_encrypted" gorm:"column:phone_encrypted"`
 	PasswordHash string `json:"password_hash" gorm:"column:password_hash"`
 	RoleID       int    `json:"role_id" gorm:"column:role_id"`
 	Role         Role
