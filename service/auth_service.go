@@ -568,12 +568,12 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 			return err
 		}
 		updates["phone_encrypted"] = PhoneEncript
-		updates["qr_token"] = helper.HashQrtoken(*input.PhoneHash)
-		qrencript, err := helper.EncryptQRTOKEN(*input.PhoneHash)
-		if err != nil {
-			return err
-		}
-		updates["qr_token_encript"] = qrencript
+		// updates["qr_token"] = helper.HashQrtoken(*input.PhoneHash)
+		// qrencript, err := helper.EncryptQRTOKEN(*input.PhoneHash)
+		// if err != nil {
+		// 	return err
+		// }
+		// updates["qr_token_encript"] = qrencript
 	}
 	if input.RoleID != nil {
 		updates["role_id"] = *input.RoleID

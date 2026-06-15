@@ -20,4 +20,9 @@ const (
 	AddPayroll  = "add.payroll"
 	ViewPayroll = "view.payroll"
 	EditPayroll = "edit.payroll"
+
+	// BackUp
+	CreateBackup   = "add.backup"
+	ViewBackup     = "view.backup"
+	DownloadBackup = "view.download.backup"
 )

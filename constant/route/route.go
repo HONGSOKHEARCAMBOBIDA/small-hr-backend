@@ -38,4 +38,9 @@ const (
 
 	// Role
 	ViewRole = "view.role"
+
+	// BackUp
+	CreateBackup   = "add.backup"
+	ViewBackup     = "view.backup"
+	DownloadBackup = "view.download.backup"
 )

@@ -245,6 +245,8 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	default:
 		return fmt.Errorf("unknown record type: %d", current.recordType)
 	}
+	GroupChatIDDecrypt, err := utils.DecryptChatID(*user.Company.GroupChatID)
+	BotTokenDecrypt, err := utils.DecryptBotToken(*user.Company.BotToken)
 	message := fmt.Sprintf(
 		"<b>%s</b>\n\n"+
 			"👤 ឈ្មោះ: %s\n"+
@@ -263,7 +265,7 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 		zoneText,
 		input.Reason,
 	)
-	go helper.SendTelegramMessage(message, *user.Company.GroupChatID, *user.Company.BotToken)
+	go helper.SendTelegramMessage(message, GroupChatIDDecrypt, BotTokenDecrypt)
 
 	if err := tx.Commit().Error; err != nil {
 		return err

@@ -6,6 +6,7 @@ import (
 	"mysql/config"
 	"mysql/model"
 	"mysql/request"
+	"mysql/utils"
 
 	"gorm.io/gorm"
 )
@@ -120,10 +121,18 @@ func (s *companyservice) UpdateCompany(ctx context.Context, id int, input reques
 		updates["radius"] = *input.Radius
 	}
 	if input.BotToken != nil {
-		updates["bot_token"] = *input.BotToken
+		encryptedBottoken, err := utils.EncryptBotToken(*input.BotToken)
+		if err != nil {
+			return err
+		}
+		updates["bot_token"] = encryptedBottoken
 	}
 	if input.GroupChatID != nil {
-		updates["group_chatID"] = *input.GroupChatID
+		encryptedChatID, err := utils.EncryptChatID(*input.GroupChatID)
+		if err != nil {
+			return err
+		}
+		updates["group_chatID"] = encryptedChatID
 	}
 	if input.Currency != nil {
 		updates["currency"] = *input.Currency

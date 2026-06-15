@@ -15,6 +15,7 @@ func SetupRoutes(r *gin.Engine) {
 	shiftcontroller := controller.NewShiftController()
 	attendancecontroller := controller.NewAttendanceController()
 	payrollcontroller := controller.NewPayrollController()
+	backupcontroller := controller.NewBackupController()
 	r.Static("/clientimage", "./public/clientimage")
 	public := r.Group("/")
 	public.Use(middleware.APIKeyAuth())
@@ -54,5 +55,10 @@ func SetupRoutes(r *gin.Engine) {
 		auth.GET(route.ViewPayrollDraft, middleware.PermissionMiddleware(permission.ViewPayroll), payrollcontroller.GetDraftPayroll)
 		auth.POST(route.AddPayroll, middleware.PermissionMiddleware(permission.AddPayroll), payrollcontroller.CreatePayroll)
 		auth.GET(route.ViewPayroll, middleware.PermissionMiddleware(permission.ViewPayroll), payrollcontroller.GetPayroll)
+
+		// Backup
+		auth.POST(route.CreateBackup, middleware.PermissionMiddleware(permission.CreateBackup), backupcontroller.TriggerBackup)
+		auth.GET(route.ViewBackup, middleware.PermissionMiddleware(permission.ViewBackup), backupcontroller.ListBackups)
+		auth.GET(route.DownloadBackup, middleware.PermissionMiddleware(permission.DownloadBackup), backupcontroller.DownloadBackup)
 	}
 }
