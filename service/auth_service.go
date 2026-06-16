@@ -168,7 +168,7 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll",
+			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err
@@ -235,16 +235,9 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		return nil, fmt.Errorf("failed to hash refresh token: %w", err)
 	}
 
-	var sessionCount int64
-	s.db.Model(&model.Session{}).
-		Where("user_id = ? AND expires_at > ?", user.ID, time.Now()).
-		Count(&sessionCount)
-
-	if sessionCount >= 5 {
-		s.db.Where("user_id = ? AND expires_at > ?", user.ID, time.Now()).
-			Order("created_at ASC").
-			Limit(1).
-			Delete(&model.Session{})
+	if err := s.db.Where("user_id = ?", user.ID).Delete(&model.Session{}).Error; err != nil {
+		log.Printf(err.Error())
+		return nil, fmt.Errorf("failed to delete session")
 	}
 
 	session := model.Session{
@@ -298,8 +291,9 @@ func (s *authservice) RefreshToken(input request.RefreshTokenRequest, c *gin.Con
 	})
 
 	var user model.User
-	s.db.First(&user, session.UserID)
-
+	if err := s.db.Select("id,role_id").Where("id = ?", session.UserID).First(&user).Error; err != nil {
+		return nil, err
+	}
 	accessExpiry := time.Now().Add(60 * time.Minute)
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
@@ -307,10 +301,20 @@ func (s *authservice) RefreshToken(input request.RefreshTokenRequest, c *gin.Con
 		"exp":     accessExpiry.Unix(),
 	}
 	accessToken, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(utils.Jwtkey)
-
+	var permissions []model.Permission
+	if err := s.db.Table("permission p").
+		Select("p.id AS id, p.name AS name").
+		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
+		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
+			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup",
+		}).
+		Scan(&permissions).Error; err != nil {
+		return nil, err
+	}
 	return &response.AuthResponse{
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshStr,
+		Permissions:  permissions,
 	}, nil
 }
 
