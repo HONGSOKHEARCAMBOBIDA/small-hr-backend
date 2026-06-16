@@ -38,6 +38,7 @@ func Run() (*Result, error) {
 	)
 
 	outFile, err := os.Create(filePath)
+	// creates a file at the path specified by filePath
 	if err != nil {
 		return nil, fmt.Errorf("create file: %w", err)
 	}

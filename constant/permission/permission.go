@@ -25,4 +25,5 @@ const (
 	CreateBackup   = "add.backup"
 	ViewBackup     = "view.backup"
 	DownloadBackup = "view.download.backup"
+	DeleteBackup   = "delete.backup"
 )

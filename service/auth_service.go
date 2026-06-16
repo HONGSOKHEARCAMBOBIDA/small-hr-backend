@@ -54,7 +54,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	}
 	phonehash := helper.HashPhone(input.Phone)
 	var user model.User
-	if err := s.db.Select("id, phone_hash, password_hash, role_id, is_active, name, qr_token, is_verify").
+	if err := s.db.Select("id, phone_hash, password_hash, role_id, is_active, name").
 		Where("phone_hash = ? AND is_active = 1", phonehash).
 		First(&user).Error; err != nil {
 		return nil, errors.New("ព័ត៌មានមិនត្រឹមត្រូវ ឬ អ្នកប្រើប្រាស់ត្រូវបានបិទគណនី")
@@ -97,7 +97,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll",
+			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err
@@ -126,16 +126,10 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash refresh token: %w", err)
 	}
-	var sessionCount int64
-	s.db.Model(&model.Session{}).
-		Where("user_id = ? AND expires_at > ?", user.ID, time.Now()).
-		Count(&sessionCount)
 
-	if sessionCount >= 5 {
-		s.db.Where("user_id = ? AND expires_at > ?", user.ID, time.Now()).
-			Order("created_at ASC").
-			Limit(1).
-			Delete(&model.Session{})
+	if err := s.db.Where("user_id = ?", user.ID).Delete(&model.Session{}).Error; err != nil {
+		log.Printf(err.Error())
+		return nil, fmt.Errorf("failed to delete session")
 	}
 
 	session := model.Session{
