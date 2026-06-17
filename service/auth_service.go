@@ -29,7 +29,7 @@ type AuthService interface {
 	RefreshToken(input request.RefreshTokenRequest, c *gin.Context) (*response.AuthResponse, error)
 	Register(ctx context.Context, input request.RegisterRequest, c *gin.Context, userID int) error
 	GetUser(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.UserResponse, *model.PaginationMetadata, error)
-	ToggleUserStatus(ctx context.Context, id int) error
+	ToggleUserStatus(ctx context.Context, id int, userID int) error
 	ChangePassword(ctx context.Context, userID int, input request.NewPasswordRequest) error
 	UpdateUser(ctx context.Context, input request.UserRequestUpdate, id int) error
 	CountUser(ctx context.Context, id int) (response.UserCount, error)
@@ -103,7 +103,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		return nil, err
 	}
 
-	accessExpiry := time.Now().Add(time.Duration(accesstoken) * time.Minute)
+	accessExpiry := time.Now().Add(time.Duration(accesstoken) * time.Hour)
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"phone":   user.PhoneHash,
@@ -485,6 +485,7 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 		users[i].PhoneHash = phonedecript
 		qrtokendecript, err := helper.DecryptQRTOKEN(users[i].QrToken)
 		if err != nil {
+			log.Printf(err.Error())
 			return nil, nil, err
 		}
 		users[i].QrToken = qrtokendecript
@@ -534,7 +535,12 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 	return users, helper.BuildPaginationMeta(pf, totalCount), nil
 }
 
-func (s *authservice) ToggleUserStatus(ctx context.Context, id int) error {
+var ErrCannotToggleOwnStatus = errors.New("cannot toggle your own status")
+
+func (s *authservice) ToggleUserStatus(ctx context.Context, id int, userID int) error {
+	if id == userID {
+		return ErrCannotToggleOwnStatus
+	}
 	result := s.db.WithContext(ctx).Model(&model.User{}).Where("id =?", id).Update("is_active", gorm.Expr("NOT is_active"))
 	if result.Error != nil {
 		return result.Error

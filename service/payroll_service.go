@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"mysql/config"
 	"mysql/helper"
 	"mysql/model"
@@ -77,6 +78,15 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, i
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch payroll draft rows: %w", err)
+	}
+
+	for i := range rows {
+		decrypted, err := helper.DecryptSalary(rows[i].BasicSalary)
+		if err != nil {
+			log.Printf(err.Error())
+			return nil, err
+		}
+		rows[i].BasicSalary = decrypted
 	}
 
 	userIDs := make([]int, 0, len(rows))

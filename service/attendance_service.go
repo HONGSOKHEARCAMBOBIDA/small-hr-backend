@@ -237,7 +237,7 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	case 1:
 		checktype = "ចូលធ្វេីការវែនទី១"
 	case 2:
-		checktype = "ចេញពីធ្វេីការវែនទី១"
+		checktype = "ចេញពីធ្វើការវែនទី១"
 	case 3:
 		checktype = "ចូលធ្វេីការវែនទី២"
 	case 4:

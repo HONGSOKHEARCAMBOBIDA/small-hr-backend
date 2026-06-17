@@ -121,11 +121,16 @@ func (cr *AuthController) GetUser(c *gin.Context) {
 func (cr *AuthController) ToggleUserStatus(c *gin.Context) {
 	idparam := c.Param("id")
 	id, err := strconv.Atoi(idparam)
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
 	if err != nil {
 		share.ResponseError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := cr.service.ToggleUserStatus(c, id); err != nil {
+	if err := cr.service.ToggleUserStatus(c, id, userID); err != nil {
 		share.ResponseError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

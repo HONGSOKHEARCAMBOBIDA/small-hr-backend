@@ -54,7 +54,7 @@ func EncryptQRTOKEN(plainText string) (string, error) {
 }
 
 func DecryptQRTOKEN(cipherTextB64 string) (string, error) {
-	key, err := getEncryptionKey()
+	key, err := getEncryptionQRTOKEN()
 	if err != nil {
 		return "", err
 	}
