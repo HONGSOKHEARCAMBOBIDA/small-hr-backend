@@ -97,13 +97,13 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup",
+			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err
 	}
 
-	accessExpiry := time.Now().Add(time.Duration(accesstoken) * time.Hour)
+	accessExpiry := time.Now().Add(time.Duration(accesstoken) * time.Minute)
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"phone":   user.PhoneHash,
@@ -168,7 +168,7 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup",
+			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err
@@ -267,8 +267,8 @@ func (s *authservice) RefreshToken(input request.RefreshTokenRequest, c *gin.Con
 	}
 	prefix := input.RefreshToken[:16]
 	var session model.Session
-	err := s.db.Where("token_prefix = ? AND expires_at > ?",
-		prefix, time.Now()).
+	err := s.db.Where("token_prefix = ?",
+		prefix).
 		First(&session).Error
 
 	if err != nil {
@@ -306,7 +306,7 @@ func (s *authservice) RefreshToken(input request.RefreshTokenRequest, c *gin.Con
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup",
+			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err

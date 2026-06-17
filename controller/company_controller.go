@@ -95,3 +95,22 @@ func (cr CompanyController) ChangeStatusCompany(c *gin.Context) {
 	}
 	share.ResponseSuccess(c, http.StatusOK, "status company changed")
 }
+
+func (cr *CompanyController) UpdateTelegram(c *gin.Context) {
+	idparam := c.Param("id")
+	id, err := strconv.Atoi(idparam)
+	if err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	var input request.CompanyRequestUpdateTelegram
+	if err := c.ShouldBindJSON(&input); err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := cr.service.UpdateTelegram(c, id, input); err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.ResponseSuccess(c, http.StatusOK, "company telegram updated")
+}

@@ -3,19 +3,23 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log"
 	"mysql/config"
 	"mysql/model"
 	"mysql/request"
+	"mysql/response"
 	"mysql/utils"
 
 	"gorm.io/gorm"
 )
 
 type CompanyService interface {
-	GetCompany(id int, ctx context.Context, pf request.Pagination) ([]model.Company, *model.PaginationMetadata, error)
+	GetCompany(id int, ctx context.Context, pf request.Pagination) ([]response.CompanyResponse, *model.PaginationMetadata, error)
 	CreateCompany(ctx context.Context, input request.CompanyRequestCreate) error
 	UpdateCompany(ctx context.Context, id int, input request.CompanyRequesUpdate) error
 	ChangeStatusCompany(ctx context.Context, id int) error
+	UpdateTelegram(ctx context.Context, id int, input request.CompanyRequestUpdateTelegram) error
 }
 
 type companyservice struct {
@@ -28,8 +32,8 @@ func NewCompanyService() CompanyService {
 	}
 }
 
-func (s *companyservice) GetCompany(id int, ctx context.Context, pf request.Pagination) ([]model.Company, *model.PaginationMetadata, error) {
-	var Company []model.Company
+func (s *companyservice) GetCompany(id int, ctx context.Context, pf request.Pagination) ([]response.CompanyResponse, *model.PaginationMetadata, error) {
+	var Company []response.CompanyResponse
 	var user model.User
 	if err := s.db.Preload("Role").First(&user, id).Error; err != nil {
 		return nil, nil, err
@@ -45,11 +49,14 @@ func (s *companyservice) GetCompany(id int, ctx context.Context, pf request.Pagi
 		c.longitude AS longitude,
 		c.radius AS radius,
 		c.bot_token AS bot_token,
-		c.group_chatID AS group_chatID,
+		c.group_chatID AS group_link,
 		c.currency AS currency,
 		c.late_penalty AS late_penalty,
-		c.left_early_penalty AS left_early_penalty
-	`)
+		c.left_early_penalty AS left_early_penalty,
+		c.can_scan_outsize AS can_scan_outsize,
+		COUNT(u.id) AS user_count
+	`).Joins("LEFT JOIN user AS u ON u.company_id = c.id").
+		Group("c.id")
 
 	if user.Role.Level < 7 {
 		query = query.Where("c.id = ?", user.CompanyID)
@@ -69,6 +76,24 @@ func (s *companyservice) GetCompany(id int, ctx context.Context, pf request.Pagi
 		totalPages++
 	}
 
+	for i := range Company {
+		if Company[i].BotToken != nil && *Company[i].BotToken != "" {
+			botTokenDecrypt, err := utils.DecryptBotToken(*Company[i].BotToken)
+			if err != nil {
+				return nil, nil, err
+			}
+			Company[i].BotToken = &botTokenDecrypt
+		}
+
+		if Company[i].GroupChatID != nil && *Company[i].GroupChatID != "" {
+			chatIDDecrypt, err := utils.DecryptChatID(*Company[i].GroupChatID)
+			if err != nil {
+				return nil, nil, err
+			}
+			Company[i].GroupChatID = &chatIDDecrypt
+		}
+	}
+
 	metadata := &model.PaginationMetadata{
 		Page:       pf.Page,
 		PageSize:   pf.PageSize,
@@ -84,17 +109,35 @@ func (s *companyservice) CreateCompany(ctx context.Context, input request.Compan
 	if tx.Error != nil {
 		return tx.Error
 	}
+	chatID, err := utils.ResolveTelegramChatID(input.BotToken, input.GroupLink)
+	if err != nil {
+		log.Printf(err.Error())
+		tx.Rollback()
+		return fmt.Errorf("could not resolve group link: %w", err)
+	}
+
+	chatIDStr := fmt.Sprintf("%d", chatID)
+
+	encryptedChatID, err := utils.EncryptChatID(chatIDStr)
+	if err != nil {
+		return err
+	}
+	encryptedBottoken, err := utils.EncryptBotToken(input.BotToken)
+	if err != nil {
+		return err
+	}
 	newCompany := model.Company{
 		Name:             input.Name,
 		Latitude:         input.Latitude,
 		Longitude:        input.Longitude,
 		Radius:           input.Radius,
 		Isactive:         true,
-		BotToken:         &input.BotToken,
-		GroupChatID:      &input.GroupChatID,
+		BotToken:         &encryptedBottoken,
+		GroupChatID:      &encryptedChatID,
 		Currency:         input.Currency,
 		LatePenalty:      input.LatePenalty,
 		LeftEarlyPenalty: input.LeftEarlyPenalty,
+		CanScanOutsize:   input.CanScanOutsize,
 	}
 
 	if err := tx.WithContext(ctx).
@@ -120,20 +163,7 @@ func (s *companyservice) UpdateCompany(ctx context.Context, id int, input reques
 	if input.Radius != nil {
 		updates["radius"] = *input.Radius
 	}
-	if input.BotToken != nil {
-		encryptedBottoken, err := utils.EncryptBotToken(*input.BotToken)
-		if err != nil {
-			return err
-		}
-		updates["bot_token"] = encryptedBottoken
-	}
-	if input.GroupChatID != nil {
-		encryptedChatID, err := utils.EncryptChatID(*input.GroupChatID)
-		if err != nil {
-			return err
-		}
-		updates["group_chatID"] = encryptedChatID
-	}
+
 	if input.Currency != nil {
 		updates["currency"] = *input.Currency
 	}
@@ -142,6 +172,9 @@ func (s *companyservice) UpdateCompany(ctx context.Context, id int, input reques
 	}
 	if input.LeftEarlyPenalty != nil {
 		updates["left_early_penalty"] = *input.LeftEarlyPenalty
+	}
+	if input.CanScanOutsize != nil {
+		updates["can_scan_outsize"] = *input.CanScanOutsize
 	}
 	if len(updates) == 0 {
 		return errors.New(" no field to update")
@@ -155,6 +188,37 @@ func (s *companyservice) UpdateCompany(ctx context.Context, id int, input reques
 
 func (s *companyservice) ChangeStatusCompany(ctx context.Context, id int) error {
 	result := s.db.WithContext(ctx).Model(&model.Company{}).Where("id =?", id).Update("is_active", gorm.Expr("NOT is_active"))
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+func (s *companyservice) UpdateTelegram(ctx context.Context, id int, input request.CompanyRequestUpdateTelegram) error {
+	updates := map[string]interface{}{}
+	if input.BotToken != nil {
+		encryptedBottoken, err := utils.EncryptBotToken(*input.BotToken)
+		if err != nil {
+			return err
+		}
+		updates["bot_token"] = encryptedBottoken
+	}
+	if input.GroupLink != nil {
+		chatID, err := utils.ResolveTelegramChatID(*input.BotToken, *input.GroupLink)
+		if err != nil {
+			return fmt.Errorf("could not resolve group link")
+		}
+		chatIDStr := fmt.Sprintf("%d", chatID)
+		encryptedChatID, err := utils.EncryptChatID(chatIDStr)
+		if err != nil {
+			return err
+		}
+		updates["group_chatID"] = encryptedChatID
+	}
+	if len(updates) == 0 {
+		return errors.New(" no field to update")
+	}
+	result := s.db.WithContext(ctx).Model(&model.Company{}).Where("id =?", id).Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}
