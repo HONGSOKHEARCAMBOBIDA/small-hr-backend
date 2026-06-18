@@ -261,6 +261,7 @@ func (s *payrollservice) GetPayroll(
 		p.half_salary AS half_salary,
 		p.other AS other,
 		p.total_work_day AS total_work_day,
+		p.total_deduction AS total_deduction,
 		p.net_salary AS net_salary,
 		c.currency AS currency,
 		p.payroll_type AS payroll_type,

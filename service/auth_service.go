@@ -97,7 +97,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company",
+			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err
@@ -168,7 +168,7 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company",
+			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err
@@ -306,7 +306,7 @@ func (s *authservice) RefreshToken(input request.RefreshTokenRequest, c *gin.Con
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company",
+			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err
