@@ -14,12 +14,11 @@ type CompanyRequestCreate struct {
 }
 
 type CompanyRequesUpdate struct {
-	Name      *string `json:"name"`
-	Latitude  *string `json:"latitude"`
-	Longitude *string `json:"longitude"`
-	Radius    *string `json:"radius"`
-	// BotToken         *string `json:"bot_token"`
-	// GroupLink        *string `json:"group_link"`
+	Name             *string `json:"name"`
+	MapLink          *string `json:"map_link"`
+	Latitude         *string `json:"latitude"`
+	Longitude        *string `json:"longitude"`
+	Radius           *string `json:"radius"`
 	Currency         *string `json:"currency"`
 	LatePenalty      *string `json:"late_penalty" gorm:"column:late_penalty"`
 	LeftEarlyPenalty *string `json:"left_early_penalty" gorm:"column:left_early_penalty"`

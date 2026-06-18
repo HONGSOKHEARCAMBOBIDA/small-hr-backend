@@ -154,11 +154,21 @@ func (s *companyservice) UpdateCompany(ctx context.Context, id int, input reques
 	if input.Name != nil {
 		updates["name"] = *input.Name
 	}
-	if input.Latitude != nil {
-		updates["latitude"] = *input.Latitude
-	}
-	if input.Longitude != nil {
-		updates["longitude"] = *input.Longitude
+	switch {
+	case input.MapLink != nil && *input.MapLink != "":
+		lat, lng, err := utils.ExtractLatLngFromGoogleMapsURL(*input.MapLink)
+		if err != nil {
+			return fmt.Errorf("invalid map_link: %w", err)
+		}
+		updates["latitude"] = lat
+		updates["longitude"] = lng
+	default:
+		if input.Latitude != nil {
+			updates["latitude"] = *input.Latitude
+		}
+		if input.Longitude != nil {
+			updates["longitude"] = *input.Longitude
+		}
 	}
 	if input.Radius != nil {
 		updates["radius"] = *input.Radius

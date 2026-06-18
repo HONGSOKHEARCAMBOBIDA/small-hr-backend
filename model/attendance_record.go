@@ -11,6 +11,8 @@ type AttendanceRecord struct {
 	CheckTime      string `json:"check_time" gorm:"column:check_time"`
 	Type           int    `json:"type" gorm:"column:type"`
 	Inzone         bool   `json:"inzone" gorm:"column:inzone"`
+	Latitude       string `json:"latitdude" gorm:"column:latitdude"`
+	Longitude      string `json:"longitude" gorm:"column:longitude"`
 }
 
 func (AttendanceRecord) TableName() string {

@@ -97,6 +97,11 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	distance := utils.CalculateDistance(companyLat, companyLng, userLat, userLng)
 	inZone := distance <= radius
 
+	if !inZone && user.Company.CanScanOutsize == 0 {
+		tx.Rollback()
+		return errors.New("អ្នកមិនអាចស្កែនក្រៅតំបន់ក្រុមហ៊ុនបានទេ")
+	}
+
 	var attendance model.Attendance
 	err = tx.Where("user_id = ? AND check_date = ?", user.ID, currentDate).First(&attendance).Error
 	if err != nil {
@@ -196,6 +201,8 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 		CheckTime:      currentTime,
 		Type:           current.recordType,
 		Inzone:         inZone,
+		Latitude:       input.Latitude,
+		Longitude:      input.Longitude,
 	}
 	if err := tx.Create(&record).Error; err != nil {
 		return err
@@ -471,7 +478,9 @@ func (s *attendanceservice) GetAttendance(ctx context.Context, id int, pf reques
         ar.resean AS reason,
         ar.check_time AS check_time,
         ar.type AS type,
-        ar.inzone AS inzone
+        ar.inzone AS inzone,
+		ar.latitdude AS latitdude,
+		ar.longitude AS longitude
     `).
 		Joins("LEFT JOIN shift s ON s.id = ar.shift_id").
 		Joins("LEFT JOIN attendance_type at ON at.id = ar.attendance_type").
