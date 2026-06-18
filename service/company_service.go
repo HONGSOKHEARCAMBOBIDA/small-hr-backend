@@ -10,6 +10,7 @@ import (
 	"mysql/request"
 	"mysql/response"
 	"mysql/utils"
+	"strconv"
 
 	"gorm.io/gorm"
 )
@@ -126,17 +127,21 @@ func (s *companyservice) CreateCompany(ctx context.Context, input request.Compan
 	if err != nil {
 		return err
 	}
+	lat, lng, err := utils.ExtractLatLngFromGoogleMapsURL(input.MapLink)
+	if err != nil {
+		return fmt.Errorf("invalid map_link: %w", err)
+	}
 	newCompany := model.Company{
 		Name:             input.Name,
-		Latitude:         input.Latitude,
-		Longitude:        input.Longitude,
-		Radius:           input.Radius,
+		Latitude:         lat,
+		Longitude:        lng,
+		Radius:           strconv.Itoa(input.Radius),
 		Isactive:         true,
 		BotToken:         &encryptedBottoken,
 		GroupChatID:      &encryptedChatID,
 		Currency:         input.Currency,
-		LatePenalty:      input.LatePenalty,
-		LeftEarlyPenalty: input.LeftEarlyPenalty,
+		LatePenalty:      strconv.Itoa(input.LatePenalty),
+		LeftEarlyPenalty: strconv.Itoa(input.LeftEarlyPenalty),
 		CanScanOutsize:   input.CanScanOutsize,
 	}
 
