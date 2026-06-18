@@ -10,7 +10,6 @@ import (
 	"mysql/request"
 	"mysql/response"
 	"mysql/utils"
-	"strconv"
 
 	"gorm.io/gorm"
 )
@@ -135,13 +134,13 @@ func (s *companyservice) CreateCompany(ctx context.Context, input request.Compan
 		Name:             input.Name,
 		Latitude:         lat,
 		Longitude:        lng,
-		Radius:           strconv.Itoa(input.Radius),
+		Radius:           input.Radius,
 		Isactive:         true,
 		BotToken:         &encryptedBottoken,
 		GroupChatID:      &encryptedChatID,
 		Currency:         input.Currency,
-		LatePenalty:      strconv.Itoa(input.LatePenalty),
-		LeftEarlyPenalty: strconv.Itoa(input.LeftEarlyPenalty),
+		LatePenalty:      input.LatePenalty,
+		LeftEarlyPenalty: input.LeftEarlyPenalty,
 		CanScanOutsize:   input.CanScanOutsize,
 	}
 
