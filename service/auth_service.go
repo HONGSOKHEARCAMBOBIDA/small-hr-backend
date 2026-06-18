@@ -339,6 +339,10 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 	qrToken := utils.GenerateQRToken()
 	qrTokenHash := helper.HashQrtoken(qrToken)
 	qrTokenEncript, err := helper.EncryptQRTOKEN(qrToken)
+	basesalaryencrypted, err := helper.EncryptSalary(input.BaseSalary)
+	if err != nil {
+		return err
+	}
 	if err != nil {
 		return err
 	}
@@ -371,7 +375,7 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 		IsActive:       true,
 		Name:           input.Name,
 		Gender:         input.Gender,
-		BaseSalary:     input.BaseSalary,
+		BaseSalary:     basesalaryencrypted,
 		CompanyID:      companyID,
 		QrToken:        qrTokenHash,
 		IsVerify:       false,
@@ -581,6 +585,9 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 	}
 	if input.RoleID != nil {
 		updates["role_id"] = *input.RoleID
+	}
+	if input.CompanyID != nil {
+		updates["company_id"] = *input.CompanyID
 	}
 	if input.Name != nil {
 		updates["name"] = *input.Name

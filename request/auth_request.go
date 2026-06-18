@@ -39,4 +39,5 @@ type UserRequestUpdate struct {
 	Name       *string `json:"name"`
 	Gender     *int    `json:"gender"`
 	BaseSalary *string `json:"base_salary"`
+	CompanyID  *int    `json:"company_id"`
 }
