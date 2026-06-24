@@ -34,6 +34,7 @@ type AuthService interface {
 	UpdateUser(ctx context.Context, input request.UserRequestUpdate, id int) error
 	CountUser(ctx context.Context, id int) (response.UserCount, error)
 	GetRole(ctx context.Context, id int) ([]model.Role, error)
+	DeleteUser(ctx context.Context, id int, userIDlogin int) error
 }
 
 type authservice struct {
@@ -463,7 +464,7 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 
 	userquery = applyAccessFilter(userquery, s.db, user.Role, user)
 	userquery = applyCommonFilter(userquery, filter)
-
+	userquery = userquery.Order("id DESC")
 	var totalCount int64
 	countQuery := userquery.Session(&gorm.Session{})
 	if err := countQuery.Count(&totalCount).Error; err != nil {
@@ -648,4 +649,50 @@ func (s *authservice) GetRole(ctx context.Context, id int) ([]model.Role, error)
 		return nil, err
 	}
 	return role, nil
+}
+
+func (s *authservice) DeleteUser(ctx context.Context, id int, userIDlogin int) error {
+	var target model.User
+	if err := s.db.Preload("Role").First(&target, id).Error; err != nil {
+		return err
+	}
+
+	var usrlog model.User
+	if err := s.db.Preload("Role").Find(&usrlog, userIDlogin).Error; err != nil {
+		return err
+	}
+
+	if err := helper.CanManageUser(usrlog.Role, target.Role); err != nil {
+		return err
+	}
+
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where(
+			"attendance_id IN (SELECT id FROM attendance WHERE user_id = ?)", id,
+		).Delete(&model.AttendanceRecord{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("user_id = ?", id).Delete(&model.Attendance{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("user_id = ?", id).Delete(&model.Payroll{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("user_id = ?", id).Delete(&model.Session{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("user_id = ?", id).Delete(&model.Shift{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("id = ?", id).Delete(&model.User{}).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 }

@@ -201,3 +201,26 @@ func (cr *AuthController) GetRole(c *gin.Context) {
 	}
 	share.RespondDate(c, http.StatusOK, data)
 }
+
+func (cr *AuthController) DeleteUser(c *gin.Context) {
+	idparam := c.Param("id")
+	id, err := strconv.Atoi(idparam)
+	if err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Get the authenticated actor from context (set by your auth middleware)
+	userlog, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "invalid user context")
+		return
+	}
+
+	if err := cr.service.DeleteUser(c, id, userlog); err != nil {
+		share.ResponseError(c, http.StatusForbidden, err.Error())
+		return
+	}
+
+	share.ResponseSuccess(c, http.StatusOK, "Deleted Success")
+}

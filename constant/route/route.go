@@ -20,6 +20,7 @@ const (
 	ToggleUserStatus = "toggle.status.user/:id"
 	ChangePassword   = "change.password"
 	CountUser        = "count.user"
+	DeleteUser       = "delete.user/:id"
 
 	// Shift
 	EditShift = "edit.shift"
