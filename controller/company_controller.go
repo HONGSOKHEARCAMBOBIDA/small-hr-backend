@@ -114,3 +114,17 @@ func (cr *CompanyController) UpdateTelegram(c *gin.Context) {
 	}
 	share.ResponseSuccess(c, http.StatusOK, "company telegram updated")
 }
+
+func (cr *CompanyController) ShowManageCompany(c *gin.Context) {
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
+	data, err := cr.service.ShowManageCompany(c, userID)
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.RespondDate(c, http.StatusOK, data)
+}

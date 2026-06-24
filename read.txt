@@ -4,3 +4,5 @@
     "username":"hear",
     "password":"123"
 }
+
+ALTER TABLE `user` add COLUMN manage_company TINYINT

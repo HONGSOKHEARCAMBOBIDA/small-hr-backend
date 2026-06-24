@@ -411,7 +411,18 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 
 func applyAccessFilter(query *gorm.DB, db *gorm.DB, role model.Role, user model.User) *gorm.DB {
 	if role.Level > 1 && role.Level < 7 {
-		return query.Where("u.company_id = ?", user.CompanyID)
+		switch user.ManageCompany {
+		case 1:
+			return query.Where("u.company_id =?", user.CompanyID)
+		case 2:
+			var companyIDs []int
+			db.Model(&model.UserCompany{}).Where("user_id =?", user.ID).Pluck("company_id", &companyIDs)
+			if len(companyIDs) == 0 {
+				return query.Where("1 = 0")
+			}
+			return query.Where("u.company_id IN ?", companyIDs)
+		}
+		return query
 	} else if role.Level <= 1 {
 		return query.Where("u.id =?", user.ID)
 	}

@@ -8,10 +8,11 @@ const (
 	Refresh   = "refresh"
 
 	// Company
-	AddCompany   = "add.company"
-	ViewCompany  = "view.company"
-	EditCompany  = "edit.company/:id"
-	EditTelegram = "edit.telegram/:id"
+	AddCompany        = "add.company"
+	ViewCompany       = "view.company"
+	EditCompany       = "edit.company/:id"
+	EditTelegram      = "edit.telegram/:id"
+	ViewManageCompany = "view.manage.company"
 
 	// User
 	AddUser          = "add.user"

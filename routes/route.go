@@ -33,6 +33,7 @@ func SetupRoutes(r *gin.Engine) {
 		auth.POST(route.AddCompany, middleware.PermissionMiddleware(permission.AddCompany), companycontroller.CreateCompany)
 		auth.PUT(route.EditCompany, middleware.PermissionMiddleware(permission.EditCompany), companycontroller.UpdateCompany)
 		auth.PUT(route.EditTelegram, middleware.PermissionMiddleware(permission.EditCompany), companycontroller.UpdateTelegram)
+		auth.GET(route.ViewManageCompany, middleware.PermissionMiddleware(permission.ViewCompany), companycontroller.ShowManageCompany)
 
 		// User
 		auth.POST(route.AddUser, middleware.PermissionMiddleware(permission.AddUser), authcontroller.Register)

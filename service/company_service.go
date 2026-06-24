@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"mysql/config"
+	"mysql/helper"
 	"mysql/model"
 	"mysql/request"
 	"mysql/response"
@@ -20,6 +21,7 @@ type CompanyService interface {
 	UpdateCompany(ctx context.Context, id int, input request.CompanyRequesUpdate) error
 	ChangeStatusCompany(ctx context.Context, id int) error
 	UpdateTelegram(ctx context.Context, id int, input request.CompanyRequestUpdateTelegram) error
+	ShowManageCompany(ctx context.Context, id int) ([]helper.ManageCompany, error)
 }
 
 type companyservice struct {
@@ -58,9 +60,11 @@ func (s *companyservice) GetCompany(id int, ctx context.Context, pf request.Pagi
 	`).Joins("LEFT JOIN user AS u ON u.company_id = c.id").
 		Group("c.id")
 
-	if user.Role.Level < 7 {
-		query = query.Where("c.id = ?", user.CompanyID)
-	}
+	// if user.Role.Level < 7 {
+	// 	query = query.Where("c.id = ?", user.CompanyID)
+	// }
+
+	query = helper.ManageCompanyFilter(query, s.db, user)
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return nil, nil, err
@@ -237,4 +241,19 @@ func (s *companyservice) UpdateTelegram(ctx context.Context, id int, input reque
 		return result.Error
 	}
 	return nil
+}
+
+func (s *companyservice) ShowManageCompany(ctx context.Context, id int) ([]helper.ManageCompany, error) {
+	var user model.User
+
+	if err := s.db.WithContext(ctx).
+		Preload("Role").
+		Where("id = ?", id).
+		First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	managecompany := helper.ShowManageCompany(user)
+
+	return managecompany, nil
 }

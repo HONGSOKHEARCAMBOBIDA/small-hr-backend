@@ -18,6 +18,7 @@ type User struct {
 	QrToken        string `json:"qr_token" gorm:"column:qr_token"`
 	IsVerify       bool   `json:"is_verify" gorm:"column:is_verify"`
 	QrTokenEncript string `json:"qr_token_encript" gorm:"column:qr_token_encript"`
+	ManageCompany  int    `json:"manage_company" gorm:"column:manage_company"`
 }
 
 func (User) TableName() string {
