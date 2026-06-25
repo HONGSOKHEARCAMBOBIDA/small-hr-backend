@@ -5,4 +5,23 @@
     "password":"123"
 }
 
+CREATE TABLE `user_company` ( 
+  `id` INT AUTO_INCREMENT NOT NULL,
+  `user_id` INT NOT NULL,
+  `company_id` INT NOT NULL,
+   PRIMARY KEY (`id`)
+)
+ENGINE = InnoDB;
+
+
 ALTER TABLE `user` add COLUMN manage_company TINYINT
+
+INSERT INTO
+  `permission` (`name`, `display_name`, `is_active`)
+VALUES
+  ("change.password", "change.password", 1);
+
+INSERT INTO
+  `role_permission` (`role_id`, `permission_id`)
+VALUES
+  (1,16)

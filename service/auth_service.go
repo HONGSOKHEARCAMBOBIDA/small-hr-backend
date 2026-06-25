@@ -340,7 +340,13 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 	qrToken := utils.GenerateQRToken()
 	qrTokenHash := helper.HashQrtoken(qrToken)
 	qrTokenEncript, err := helper.EncryptQRTOKEN(qrToken)
+	if err != nil {
+		return err
+	}
 	basesalaryencrypted, err := helper.EncryptSalary(input.BaseSalary)
+	if err != nil {
+		return err
+	}
 	if err != nil {
 		return err
 	}
@@ -381,9 +387,22 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 		QrToken:        qrTokenHash,
 		IsVerify:       false,
 		QrTokenEncript: qrTokenEncript,
+		ManageCompany:  input.ManageCompany,
 	}
 	if err := tx.Create(&user).Error; err != nil {
 		return err
+	}
+
+	if input.ManageCompany == 2 && len(input.CompanyIDs) != 0 {
+		for i := range input.CompanyIDs {
+			usercompany := model.UserCompany{
+				UserID:    user.ID,
+				CompanyID: *input.CompanyIDs[i],
+			}
+			if err := tx.Create(&usercompany).Error; err != nil {
+				return err
+			}
+		}
 	}
 
 	for i, day := range input.Day {
@@ -468,7 +487,8 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
             c.name AS company_name,
             u.qr_token_encript AS qr_token,
             u.is_verify AS is_verify,
-			c.currency AS currency
+			c.currency AS currency,
+			u.manage_company AS manage_company
         `).
 		Joins("LEFT JOIN role r ON r.id = u.role_id").
 		Joins("LEFT JOIN company c ON c.id = u.company_id")
@@ -548,6 +568,29 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 		users[i].ShiftResponse = shiftByUserID[a.ID]
 	}
 
+	var usercompany []model.UserCompany
+	usercompanyquery := s.db.WithContext(ctx).Table("user_company uc").Select(`
+		uc.user_id AS user_id,
+		uc.company_id AS company_id
+	`).Where("uc.user_id IN ?", userIDs)
+
+	if err := usercompanyquery.Scan(&usercompany).Error; err != nil {
+		return nil, nil, err
+	}
+	usercompanybyuserID := make(map[int][]model.UserCompany, len(users))
+	for _, r := range usercompany {
+		usercompanybyuserID[r.UserID] = append(usercompanybyuserID[r.UserID], r)
+
+	}
+
+	for i, a := range users {
+		var ids []int
+		for _, uc := range usercompanybyuserID[a.ID] {
+			ids = append(ids, uc.CompanyID)
+		}
+		users[i].CompanyIDs = ids
+	}
+
 	return users, helper.BuildPaginationMeta(pf, totalCount), nil
 }
 
@@ -588,12 +631,6 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 			return err
 		}
 		updates["phone_encrypted"] = PhoneEncript
-		// updates["qr_token"] = helper.HashQrtoken(*input.PhoneHash)
-		// qrencript, err := helper.EncryptQRTOKEN(*input.PhoneHash)
-		// if err != nil {
-		// 	return err
-		// }
-		// updates["qr_token_encript"] = qrencript
 	}
 	if input.RoleID != nil {
 		updates["role_id"] = *input.RoleID
@@ -607,6 +644,9 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 	if input.Gender != nil {
 		updates["gender"] = *input.Gender
 	}
+	if input.ManageCompany != nil {
+		updates["manage_company"] = *input.ManageCompany
+	}
 	if input.BaseSalary != nil {
 		encrypted, err := helper.EncryptSalary(*input.BaseSalary)
 		if err != nil {
@@ -614,12 +654,49 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 		}
 		updates["base_salary"] = encrypted
 	}
-	result := s.db.WithContext(ctx).Model(&model.User{}).Where("id =?", id).Updates(updates)
-	if result.Error != nil {
-		slog.Error("failed to create payroll", "error", result.Error)
-		return result.Error
 
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return tx.Error
 	}
+	committed := false
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		} else if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	if len(updates) > 0 {
+		if err := tx.Model(&model.User{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			slog.Error("failed to update user", "error", err)
+			return err
+		}
+	}
+
+	if input.ManageCompany != nil && *input.ManageCompany == 2 && len(input.CompanyIDs) != 0 {
+		if err := tx.Where("user_id = ?", id).Delete(&model.UserCompany{}).Error; err != nil {
+			return err
+		}
+		for _, cid := range input.CompanyIDs {
+			if cid == nil {
+				return errors.New("company_ids must not contain null values")
+			}
+			uc := model.UserCompany{
+				UserID:    id,
+				CompanyID: *cid,
+			}
+			if err := tx.Create(&uc).Error; err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	committed = true
 	return nil
 }
 

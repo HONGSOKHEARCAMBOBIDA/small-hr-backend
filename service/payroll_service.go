@@ -14,7 +14,7 @@ import (
 )
 
 type PayrollService interface {
-	GetDraftPayroll(ctx context.Context, payrolltype int, id int) ([]response.PayrollDraftResponse, error)
+	GetDraftPayroll(ctx context.Context, payrolltype int, company_id int) ([]response.PayrollDraftResponse, error)
 	CreatePayroll(ctx context.Context, req request.PayrollRequestCreate) error
 	GetPayroll(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.PayrollResponse, *model.PaginationMetadata, error)
 }
@@ -29,12 +29,12 @@ func NewPayrollService() PayrollService {
 	}
 }
 
-func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, id int) ([]response.PayrollDraftResponse, error) {
+func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, company_id int) ([]response.PayrollDraftResponse, error) {
 
-	var user model.User
-	if err := s.db.WithContext(ctx).First(&user, id).Error; err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
-	}
+	// var user model.User
+	// if err := s.db.WithContext(ctx).First(&user, id).Error; err != nil {
+	// 	return nil, fmt.Errorf("user not found: %w", err)
+	// }
 
 	type rawRow struct {
 		UserID           int
@@ -69,12 +69,12 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, i
 		LEFT JOIN attendance a ON a.user_id = u.id
 		LEFT JOIN attendance_record ar ON ar.attendance_id = a.id
 
-		WHERE u.company_id = (SELECT company_id FROM user WHERE id = ?)
+		WHERE u.company_id = ?
 		  AND u.is_active   = true
 		GROUP BY
 			u.id, u.name, r.display_name, u.base_salary,
 			c.currency, c.late_penalty, c.left_early_penalty
-	`, id).Scan(&rows).Error
+	`, company_id).Scan(&rows).Error
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch payroll draft rows: %w", err)
@@ -213,6 +213,8 @@ func applyCommonFilterPayroll(query *gorm.DB, filter map[string]string) *gorm.DB
 			query = query.Where("DATE_FORMAT(p.payroll_date, '%Y-%m') = ?", value)
 		case "payroll_type":
 			query = query.Where("p.payroll_type =?", value)
+		case "company_id":
+			query = query.Where("u.company_id =?", value)
 		}
 	}
 	return query

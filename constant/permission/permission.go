@@ -7,9 +7,10 @@ const (
 	EditCompany = "edit.company"
 
 	// User
-	AddUser  = "add.user"
-	ViewUser = "view.user"
-	EditUser = "edit.user"
+	AddUser        = "add.user"
+	ViewUser       = "view.user"
+	EditUser       = "edit.user"
+	ChangePassword = "change.password"
 
 	// Attendance
 	AddAttendance  = "add.attendance"

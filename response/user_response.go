@@ -1,6 +1,8 @@
 package response
 
-import "mysql/model/base"
+import (
+	"mysql/model/base"
+)
 
 type UserResponse struct {
 	base.ModelBase
@@ -19,6 +21,8 @@ type UserResponse struct {
 	QrToken       string          `json:"qr_token" gorm:"column:qr_token"`
 	IsVerify      bool            `json:"is_verify" gorm:"column:is_verify"`
 	ShiftResponse []ShiftResponse `json:"shift_response" gorm:"-"`
+	ManageCompany int             `json:"manage_company"`
+	CompanyIDs    []int           `json:"company_ids" gorm:"-"`
 }
 
 type UserCount struct {

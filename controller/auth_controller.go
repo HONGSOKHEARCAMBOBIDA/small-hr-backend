@@ -89,7 +89,7 @@ func (cr *AuthController) GetUser(c *gin.Context) {
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
 	if page < 1 {
 		page = 1
 	}
