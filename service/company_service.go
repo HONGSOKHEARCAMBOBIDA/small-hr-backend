@@ -16,6 +16,7 @@ import (
 )
 
 type CompanyService interface {
+	GetCompanyColor(userID int) (response.CompanyColor, error)
 	GetCompany(id int, ctx context.Context, pf request.Pagination) ([]response.CompanyResponse, *model.PaginationMetadata, error)
 	CreateCompany(ctx context.Context, input request.CompanyRequestCreate) error
 	UpdateCompany(ctx context.Context, id int, input request.CompanyRequesUpdate) error
@@ -32,6 +33,22 @@ func NewCompanyService() CompanyService {
 	return &companyservice{
 		db: config.DB,
 	}
+}
+
+func (s *companyservice) GetCompanyColor(userID int) (response.CompanyColor, error) {
+	var color response.CompanyColor
+
+	err := s.db.Table("company AS c").
+		Select(`c.color AS color`).
+		Joins("LEFT JOIN user u ON u.company_id = c.id").
+		Where("u.id = ?", userID).
+		Scan(&color).Error
+
+	if err != nil {
+		return color, err
+	}
+
+	return color, nil
 }
 
 func (s *companyservice) GetCompany(id int, ctx context.Context, pf request.Pagination) ([]response.CompanyResponse, *model.PaginationMetadata, error) {
@@ -56,6 +73,7 @@ func (s *companyservice) GetCompany(id int, ctx context.Context, pf request.Pagi
 		c.late_penalty AS late_penalty,
 		c.left_early_penalty AS left_early_penalty,
 		c.can_scan_outsize AS can_scan_outsize,
+		c.color AS color,
 		COUNT(u.id) AS user_count
 	`).Joins("LEFT JOIN user AS u ON u.company_id = c.id").
 		Group("c.id")
@@ -146,6 +164,7 @@ func (s *companyservice) CreateCompany(ctx context.Context, input request.Compan
 		LatePenalty:      input.LatePenalty,
 		LeftEarlyPenalty: input.LeftEarlyPenalty,
 		CanScanOutsize:   input.CanScanOutsize,
+		Color:            input.Color,
 	}
 
 	if err := tx.WithContext(ctx).
@@ -193,6 +212,9 @@ func (s *companyservice) UpdateCompany(ctx context.Context, id int, input reques
 	}
 	if input.CanScanOutsize != nil {
 		updates["can_scan_outsize"] = *input.CanScanOutsize
+	}
+	if input.Color != nil {
+		updates["color"] = *input.Color
 	}
 	if len(updates) == 0 {
 		return errors.New(" no field to update")

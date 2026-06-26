@@ -13,6 +13,7 @@ const (
 	EditCompany       = "edit.company/:id"
 	EditTelegram      = "edit.telegram/:id"
 	ViewManageCompany = "view.manage.company"
+	ViewCompanyColor  = "view.company.color"
 
 	// User
 	AddUser          = "add.user"

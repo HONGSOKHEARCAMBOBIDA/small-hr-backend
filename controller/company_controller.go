@@ -21,6 +21,20 @@ func NewCompanyController() CompanyController {
 	}
 }
 
+func (cr *CompanyController) GetCompanyColor(c *gin.Context) {
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
+	company, err := cr.service.GetCompanyColor(userID)
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.RespondDate(c, http.StatusOK, company)
+}
+
 func (cr CompanyController) GetCompany(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))

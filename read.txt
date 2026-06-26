@@ -25,3 +25,5 @@ INSERT INTO
   `role_permission` (`role_id`, `permission_id`)
 VALUES
   (1,16)
+
+ALTER TABLE company ADD COLUMN color VARCHAR(7) DEFAULT '#000000';

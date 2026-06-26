@@ -16,4 +16,9 @@ type CompanyResponse struct {
 	LatePenalty      string  `json:"late_penalty" gorm:"column:late_penalty"`
 	LeftEarlyPenalty string  `json:"left_early_penalty" gorm:"column:left_early_penalty"`
 	CanScanOutsize   int     `json:"can_scan_outsize" gorm:"column:can_scan_outsize"`
+	Color            string  `json:"color" gorm:"column:color"`
+}
+
+type CompanyColor struct {
+	Color string `json:"color" gorm:"column:color"`
 }
