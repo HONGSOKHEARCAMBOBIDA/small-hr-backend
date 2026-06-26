@@ -675,10 +675,11 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 		}
 	}
 
-	if input.ManageCompany != nil && *input.ManageCompany == 2 && len(input.CompanyIDs) != 0 {
+	if *input.ManageCompany != 2 {
 		if err := tx.Where("user_id = ?", id).Delete(&model.UserCompany{}).Error; err != nil {
 			return err
 		}
+	} else if *input.ManageCompany == 2 {
 		for _, cid := range input.CompanyIDs {
 			if cid == nil {
 				return errors.New("company_ids must not contain null values")
