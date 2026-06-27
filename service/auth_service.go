@@ -14,6 +14,7 @@ import (
 	"mysql/request"
 	"mysql/response"
 	"mysql/utils"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -26,7 +27,7 @@ import (
 type AuthService interface {
 	Login(input request.AuthRequest, c *gin.Context) (*response.AuthResponse, error)
 	LoginByQr(input request.LoginQrRequest, c *gin.Context) (*response.AuthResponse, error)
-	RefreshToken(input request.RefreshTokenRequest, c *gin.Context) (*response.AuthResponse, error)
+	RefreshToken(refreshToken string, c *gin.Context) (*response.AuthResponse, error)
 	Register(ctx context.Context, input request.RegisterRequest, c *gin.Context, userID int) error
 	GetUser(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.UserResponse, *model.PaginationMetadata, error)
 	ToggleUserStatus(ctx context.Context, id int, userID int) error
@@ -123,31 +124,38 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	}
 	refreshTokenStr := hex.EncodeToString(refreshTokenBytes)
 	tokenPrefix := refreshTokenStr[:16]
-	hashedRefresh, err := bcrypt.GenerateFromPassword([]byte(refreshTokenStr), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash refresh token: %w", err)
-	}
-
+	hashedRefresh := utils.HashToken(refreshTokenStr)
 	if err := s.db.Where("user_id = ?", user.ID).Delete(&model.Session{}).Error; err != nil {
 		log.Printf(err.Error())
 		return nil, fmt.Errorf("failed to delete session")
 	}
-
+	refreshExpiry := time.Now().Add(time.Duration(refreshtoken) * 24 * time.Hour)
 	session := model.Session{
 		UserID:       uint(user.ID),
 		RefreshToken: string(hashedRefresh),
 		TokenPrefix:  tokenPrefix,
-		ExpiresAt:    time.Now().Add(time.Duration(refreshtoken) * 24 * time.Hour),
+		ExpiresAt:    refreshExpiry,
 	}
 	if err := s.db.Create(&session).Error; err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
+	maxAge := int(time.Until(refreshExpiry).Seconds())
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(
+		"refresh_token",
+		refreshTokenStr,
+		maxAge,
+		"/",
+		"",   // domain: leave empty for current host, or set "yourdomain.com" explicitly
+		true, // Secure - HTTPS only
+		true, // httpOnly - JS cannot read this
+	)
 	resp := &response.AuthResponse{
 		ID:           user.ID,
 		Name:         user.Name,
 		AccessToken:  accessTokenStr,
-		RefreshToken: refreshTokenStr,
+		RefreshToken: "ហែងអត់មានការងារធ្វេីហី!!🖕",
 		Permissions:  permissions,
 	}
 
@@ -231,77 +239,121 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 	}
 	refreshTokenStr := hex.EncodeToString(refreshTokenBytes)
 	tokenPrefix := refreshTokenStr[:16]
-	hashedRefresh, err := bcrypt.GenerateFromPassword([]byte(refreshTokenStr), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash refresh token: %w", err)
-	}
-
+	hashedRefresh := utils.HashToken(refreshTokenStr)
 	if err := s.db.Where("user_id = ?", user.ID).Delete(&model.Session{}).Error; err != nil {
 		log.Printf(err.Error())
 		return nil, fmt.Errorf("failed to delete session")
 	}
 
+	refreshExpiry := time.Now().Add(time.Duration(refreshtoken) * 24 * time.Hour)
+
 	session := model.Session{
 		UserID:       uint(user.ID),
 		RefreshToken: string(hashedRefresh),
 		TokenPrefix:  tokenPrefix,
-		ExpiresAt:    time.Now().Add(time.Duration(refreshtoken) * 24 * time.Hour),
+		ExpiresAt:    refreshExpiry,
 	}
 	if err := s.db.Create(&session).Error; err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
+	maxAge := int(time.Until(refreshExpiry).Seconds())
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(
+		"refresh_token",
+		refreshTokenStr,
+		maxAge,
+		"/",
+		"",   // domain: leave empty for current host, or set "yourdomain.com" explicitly
+		true, // Secure - HTTPS only
+		true, // httpOnly - JS cannot read this
+	)
 	resp := &response.AuthResponse{
-		ID:           user.ID,
-		Name:         user.Name,
-		AccessToken:  accessTokenStr,
-		RefreshToken: refreshTokenStr,
-		Permissions:  permissions,
+		ID:          user.ID,
+		Name:        user.Name,
+		AccessToken: accessTokenStr,
+		//		RefreshToken: refreshTokenStr,
+		Permissions: permissions,
 	}
 
 	return resp, nil
 }
 
-func (s *authservice) RefreshToken(input request.RefreshTokenRequest, c *gin.Context) (*response.AuthResponse, error) {
-	if len(input.RefreshToken) < 16 {
+func (s *authservice) RefreshToken(refreshToken string, c *gin.Context) (*response.AuthResponse, error) {
+	if len(refreshToken) < 16 {
 		return nil, errors.New("Invalid refresh token")
 	}
-	prefix := input.RefreshToken[:16]
-	var session model.Session
-	err := s.db.Where("token_prefix = ?",
-		prefix).
-		First(&session).Error
+	prefix := refreshToken[:16]
 
+	var session model.Session
+	err := s.db.Where("token_prefix = ?", prefix).First(&session).Error
 	if err != nil {
 		return nil, errors.New("Invalid or expired refresh token")
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(session.RefreshToken), []byte(input.RefreshToken)); err != nil {
+
+	if session.ExpiresAt.Before(time.Now()) {
 		return nil, errors.New("Invalid or expired refresh token")
 	}
 
+	if !utils.VerifyToken(session.RefreshToken, refreshToken) {
+		return nil, errors.New("Invalid or expired refresh token")
+	}
+
+	var settings []model.Setting
+	if err := s.db.Where("`key` IN ?", []string{
+		"ACCESS_TOKEN_EXPIRE_HOURS",
+		"REFRESH_TOKEN_EXPIRE_DAYS",
+	}).Find(&settings).Error; err != nil {
+		return nil, err
+	}
+
+	settingMap := make(map[string]string)
+	for _, s := range settings {
+		settingMap[s.Key] = s.Value
+	}
+
+	accesstoken, err := strconv.Atoi(settingMap["ACCESS_TOKEN_EXPIRE_HOURS"])
+	if err != nil {
+		return nil, err
+	}
+
+	refreshtoken, err := strconv.Atoi(settingMap["REFRESH_TOKEN_EXPIRE_DAYS"])
+	if err != nil {
+		return nil, errors.New("Bad request")
+	}
+
+	accessExpiry := time.Now().Add(time.Duration(accesstoken) * time.Minute)
+	refreshExpiry := time.Now().Add(time.Duration(refreshtoken) * 24 * time.Hour)
 	newRefreshBytes := make([]byte, 32)
-	rand.Read(newRefreshBytes)
+	if _, err := rand.Read(newRefreshBytes); err != nil {
+		return nil, errors.New("failed to generate refresh token")
+	}
 	newRefreshStr := hex.EncodeToString(newRefreshBytes)
-	newHash, _ := bcrypt.GenerateFromPassword([]byte(newRefreshStr), bcrypt.DefaultCost)
+	newHash := utils.HashToken(newRefreshStr)
 	newPrefix := newRefreshStr[:16]
 
-	s.db.Model(&session).Updates(model.Session{
-		RefreshToken: string(newHash),
+	if err := s.db.Model(&session).Updates(model.Session{
+		RefreshToken: newHash,
 		TokenPrefix:  newPrefix,
-		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
-	})
+		ExpiresAt:    refreshExpiry,
+	}).Error; err != nil {
+		return nil, err
+	}
 
 	var user model.User
 	if err := s.db.Select("id,role_id").Where("id = ?", session.UserID).First(&user).Error; err != nil {
 		return nil, err
 	}
-	accessExpiry := time.Now().Add(60 * time.Minute)
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"role_id": user.RoleID,
 		"exp":     accessExpiry.Unix(),
 	}
-	accessToken, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(utils.Jwtkey)
+	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(utils.Jwtkey)
+	if err != nil {
+		return nil, err
+	}
+
 	var permissions []model.Permission
 	if err := s.db.Table("permission p").
 		Select("p.id AS id, p.name AS name").
@@ -312,10 +364,23 @@ func (s *authservice) RefreshToken(input request.RefreshTokenRequest, c *gin.Con
 		Scan(&permissions).Error; err != nil {
 		return nil, err
 	}
+
+	maxAge := int(time.Until(refreshExpiry).Seconds())
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(
+		"refresh_token",
+		newRefreshStr,
+		maxAge,
+		"/",
+		"",   // domain: leave empty for current host, or set "yourdomain.com" explicitly
+		true, // Secure - HTTPS only
+		true, // httpOnly - JS cannot read this
+	)
+
 	return &response.AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: newRefreshStr,
-		Permissions:  permissions,
+		AccessToken: accessToken,
+		//		RefreshToken: newRefreshStr,
+		Permissions: permissions,
 	}, nil
 }
 

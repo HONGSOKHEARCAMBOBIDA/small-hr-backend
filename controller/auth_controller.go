@@ -51,12 +51,16 @@ func (cr *AuthController) LoginByQr(c *gin.Context) {
 }
 
 func (cr *AuthController) Refresh(c *gin.Context) {
-	var input request.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&input); err != nil {
+
+	// var input request.RefreshTokenRequest
+	///	log.Printf(input.RefreshToken)
+	cookie, err := c.Cookie("refresh_token")
+	if err != nil {
 		share.ResponseError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	result, err := cr.service.RefreshToken(input, c)
+
+	result, err := cr.service.RefreshToken(cookie, c)
 	if err != nil {
 		share.ResponseError(c, http.StatusInternalServerError, err.Error())
 		return

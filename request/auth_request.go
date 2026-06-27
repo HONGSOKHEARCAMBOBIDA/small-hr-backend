@@ -28,7 +28,7 @@ type RegisterRequest struct {
 }
 
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
+	RefreshToken string `cookie:"refresh_token" binding:"required"`
 }
 
 type NewPasswordRequest struct {
