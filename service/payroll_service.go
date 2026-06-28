@@ -182,7 +182,12 @@ func (s *payrollservice) CreatePayroll(ctx context.Context, req request.PayrollR
 				for _, a := range item.UnPaidAttendance {
 					attendanceIDs = append(attendanceIDs, a.AttendanceID)
 				}
-				if err := tx.Model(&model.Attendance{}).Where("id IN (?) AND user_id =?", attendanceIDs, item.UserID).Update("is_paid", true).Error; err != nil {
+				if err := tx.Model(&model.Attendance{}).
+					Where("id IN (?) AND user_id = ?", attendanceIDs, item.UserID).
+					Updates(map[string]interface{}{
+						"is_paid":    true,
+						"payroll_id": payroll.ID,
+					}).Error; err != nil {
 					return fmt.Errorf("failed to update attendance for user %d: %w", item.UserID, err)
 				}
 			}

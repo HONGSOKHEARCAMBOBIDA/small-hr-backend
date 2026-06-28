@@ -152,11 +152,10 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		true, // httpOnly - JS cannot read this
 	)
 	resp := &response.AuthResponse{
-		ID:           user.ID,
-		Name:         user.Name,
-		AccessToken:  accessTokenStr,
-		RefreshToken: "ហែងអត់មានការងារធ្វេីហី!!🖕",
-		Permissions:  permissions,
+		ID:          user.ID,
+		Name:        user.Name,
+		AccessToken: accessTokenStr,
+		Permissions: permissions,
 	}
 
 	return resp, nil
@@ -272,7 +271,6 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		ID:          user.ID,
 		Name:        user.Name,
 		AccessToken: accessTokenStr,
-		//		RefreshToken: refreshTokenStr,
 		Permissions: permissions,
 	}
 
@@ -379,7 +377,6 @@ func (s *authservice) RefreshToken(refreshToken string, c *gin.Context) (*respon
 
 	return &response.AuthResponse{
 		AccessToken: accessToken,
-		//		RefreshToken: newRefreshStr,
 		Permissions: permissions,
 	}, nil
 }
