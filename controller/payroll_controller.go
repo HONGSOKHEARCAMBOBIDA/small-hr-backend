@@ -98,3 +98,16 @@ func (cr *PayrollController) GetPayroll(c *gin.Context) {
 		"pagination": metadata,
 	})
 }
+
+func (cr *PayrollController) DeletePayroll(c *gin.Context) {
+	var input request.PayrollRequestDelete
+	if err := c.ShouldBindJSON(&input); err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := cr.service.DeletePayroll(c, input); err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.ResponseSuccess(c, http.StatusOK, "Delete")
+}

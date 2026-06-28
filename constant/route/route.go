@@ -23,6 +23,7 @@ const (
 	ChangePassword   = "change.password"
 	CountUser        = "count.user"
 	DeleteUser       = "delete.user/:id"
+	ViewUserData     = "view.user.data"
 
 	// Shift
 	EditShift = "edit.shift"
@@ -39,6 +40,7 @@ const (
 	ViewPayroll      = "view.payroll"
 	ViewPayrollDraft = "view.payroll.draft"
 	EditPayroll      = "edit.payroll"
+	DeletePayroll    = "delete.payroll"
 
 	// Role
 	ViewRole = "view.role"

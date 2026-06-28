@@ -228,3 +228,17 @@ func (cr *AuthController) DeleteUser(c *gin.Context) {
 
 	share.ResponseSuccess(c, http.StatusOK, "Deleted Success")
 }
+
+func (cr *AuthController) GetUserData(c *gin.Context) {
+	userlog, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "invalid user context")
+		return
+	}
+	data, err := cr.service.GetUserData(c, userlog)
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.RespondDate(c, http.StatusOK, data)
+}

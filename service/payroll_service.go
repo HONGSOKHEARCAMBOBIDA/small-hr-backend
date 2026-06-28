@@ -17,6 +17,7 @@ type PayrollService interface {
 	GetDraftPayroll(ctx context.Context, payrolltype int, company_id int) ([]response.PayrollDraftResponse, error)
 	CreatePayroll(ctx context.Context, req request.PayrollRequestCreate) error
 	GetPayroll(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.PayrollResponse, *model.PaginationMetadata, error)
+	DeletePayroll(ctx context.Context, req request.PayrollRequestDelete) error
 }
 
 type payrollservice struct {
@@ -291,4 +292,26 @@ func (s *payrollservice) GetPayroll(
 	}
 
 	return payroll, helper.BuildPaginationMeta(pf, totalCount), nil
+}
+
+func (s *payrollservice) DeletePayroll(ctx context.Context, req request.PayrollRequestDelete) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(req.PayrollIDs) > 0 {
+			if err := tx.Model(&model.Payroll{}).
+				Where("id IN (?)", req.PayrollIDs).
+				Delete(&model.Payroll{}).Error; err != nil {
+				return fmt.Errorf("failed to delete payroll: %w", err)
+			}
+
+			if err := tx.Model(&model.Attendance{}).
+				Where("payroll_id IN (?)", req.PayrollIDs).
+				Updates(map[string]interface{}{
+					"is_paid":    false,
+					"payroll_id": nil,
+				}).Error; err != nil {
+				return fmt.Errorf("failed to update attendance: %w", err)
+			}
+		}
+		return nil
+	})
 }

@@ -22,3 +22,7 @@ type UnPaidAttendance struct {
 type PayrollRequestCreate struct {
 	Payrolls []PayrollRequestItem `json:"payrolls"`
 }
+
+type PayrollRequestDelete struct {
+	PayrollIDs []int `json:"payroll_ids"`
+}

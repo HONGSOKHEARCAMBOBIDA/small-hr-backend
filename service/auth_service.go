@@ -36,6 +36,7 @@ type AuthService interface {
 	CountUser(ctx context.Context, id int) (response.UserCount, error)
 	GetRole(ctx context.Context, id int) ([]model.Role, error)
 	DeleteUser(ctx context.Context, id int, userIDlogin int) error
+	GetUserData(ctx context.Context, id int) (response.UserDataResponse, error)
 }
 
 type authservice struct {
@@ -99,7 +100,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
+			"add.payroll", "edit.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err
@@ -176,7 +177,7 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
+			"add.payroll", "edit.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err
@@ -357,7 +358,7 @@ func (s *authservice) RefreshToken(refreshToken string, c *gin.Context) (*respon
 		Select("p.id AS id, p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
 		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
+			"add.payroll", "edit.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return nil, err
@@ -846,4 +847,23 @@ func (s *authservice) DeleteUser(ctx context.Context, id int, userIDlogin int) e
 
 		return nil
 	})
+}
+
+func (s *authservice) GetUserData(ctx context.Context, id int) (response.UserDataResponse, error) {
+	var userdata response.UserDataResponse
+
+	err := s.db.WithContext(ctx).
+		Table("user u").
+		Select(`
+			u.id AS id,
+			u.name AS name
+		`).
+		Where("u.id = ?", id).
+		Scan(&userdata).Error
+
+	if err != nil {
+		return userdata, fmt.Errorf("failed to get user data: %w", err)
+	}
+
+	return userdata, nil
 }

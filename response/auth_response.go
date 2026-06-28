@@ -9,3 +9,8 @@ type AuthResponse struct {
 	RefreshToken string             `json:"refresh_token"`
 	Permissions  []model.Permission `json:"permissions"`
 }
+
+type UserDataResponse struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
