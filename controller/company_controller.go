@@ -54,7 +54,7 @@ func (cr CompanyController) GetCompany(c *gin.Context) {
 		PageSize: pageSize,
 	})
 	if err != nil {
-		share.ResponseError(c, http.StatusNoContent, err.Error())
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
