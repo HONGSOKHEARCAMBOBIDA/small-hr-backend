@@ -26,5 +26,9 @@ INSERT INTO
 VALUES
   (1,16)
 
+//
+
 ALTER TABLE company ADD COLUMN color VARCHAR(7) DEFAULT '#000000';
 ALTER TABLE attendance add column payroll_id int
+ALTER TABLE permission
+ADD UNIQUE INDEX idx_permission_name (name);

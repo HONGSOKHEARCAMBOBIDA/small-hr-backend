@@ -95,16 +95,16 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	}
 	utils.Redis.Del(utils.Ctx, key)
 
-	var permissions []model.Permission
-	if err := s.db.Table("permission p").
-		Select("p.id AS id, p.name AS name").
-		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
-		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "edit.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
-		}).
-		Scan(&permissions).Error; err != nil {
-		return nil, err
-	}
+	// var permissions []model.Permission
+	// if err := s.db.Table("permission p").
+	// 	Select("p.id AS id, p.name AS name").
+	// 	Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
+	// 	Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
+	// 		"add.payroll", "edit.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
+	// 	}).
+	// 	Scan(&permissions).Error; err != nil {
+	// 	return nil, err
+	// }
 
 	accessExpiry := time.Now().Add(time.Duration(accesstoken) * time.Hour)
 	claims := jwt.MapClaims{
@@ -153,10 +153,10 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		true, // httpOnly - JS cannot read this
 	)
 	resp := &response.AuthResponse{
-		ID:          user.ID,
-		Name:        user.Name,
+		// ID:          user.ID,
+		// Name:        user.Name,
 		AccessToken: accessTokenStr,
-		Permissions: permissions,
+		//Permissions: permissions,
 	}
 
 	return resp, nil
@@ -172,16 +172,16 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		return nil, errors.New("ព័ត៌មានមិនត្រឹមត្រូវ ឬ អ្នកប្រើប្រាស់ត្រូវបានបិទគណនី")
 	}
 
-	var permissions []model.Permission
-	if err := s.db.Table("permission p").
-		Select("p.id AS id, p.name AS name").
-		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
-		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "edit.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
-		}).
-		Scan(&permissions).Error; err != nil {
-		return nil, err
-	}
+	// var permissions []model.Permission
+	// if err := s.db.Table("permission p").
+	// 	Select("p.id AS id, p.name AS name").
+	// 	Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
+	// 	Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
+	// 		"add.payroll", "edit.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
+	// 	}).
+	// 	Scan(&permissions).Error; err != nil {
+	// 	return nil, err
+	// }
 
 	var settings []model.Setting
 	if err := s.db.Where("`key` IN ?", []string{
@@ -269,10 +269,10 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 		true, // httpOnly - JS cannot read this
 	)
 	resp := &response.AuthResponse{
-		ID:          user.ID,
-		Name:        user.Name,
+		// ID:          user.ID,
+		// Name:        user.Name,
 		AccessToken: accessTokenStr,
-		Permissions: permissions,
+		//Permissions: permissions,
 	}
 
 	return resp, nil
@@ -353,16 +353,16 @@ func (s *authservice) RefreshToken(refreshToken string, c *gin.Context) (*respon
 		return nil, err
 	}
 
-	var permissions []model.Permission
-	if err := s.db.Table("permission p").
-		Select("p.id AS id, p.name AS name").
-		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
-		Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
-			"add.payroll", "edit.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
-		}).
-		Scan(&permissions).Error; err != nil {
-		return nil, err
-	}
+	// var permissions []model.Permission
+	// if err := s.db.Table("permission p").
+	// 	Select("p.id AS id, p.name AS name").
+	// 	Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
+	// 	Where("rhp.role_id = ? AND p.name IN ?", user.RoleID, []string{
+	// 		"add.payroll", "edit.payroll", "add.backup", "view.backup", "view.download.backup", "delete.backup", "add.company", "edit.company", "edit.user",
+	// 	}).
+	// 	Scan(&permissions).Error; err != nil {
+	// 	return nil, err
+	// }
 
 	maxAge := int(time.Until(refreshExpiry).Seconds())
 	c.SetSameSite(http.SameSiteStrictMode)
@@ -378,7 +378,7 @@ func (s *authservice) RefreshToken(refreshToken string, c *gin.Context) (*respon
 
 	return &response.AuthResponse{
 		AccessToken: accessToken,
-		Permissions: permissions,
+		//Permissions: permissions,
 	}, nil
 }
 
@@ -856,7 +856,8 @@ func (s *authservice) GetUserData(ctx context.Context, id int) (response.UserDat
 		Table("user u").
 		Select(`
 			u.id AS id,
-			u.name AS name
+			u.name AS name,
+			u.role_id AS role_id
 		`).
 		Where("u.id = ?", id).
 		Scan(&userdata).Error
@@ -864,6 +865,26 @@ func (s *authservice) GetUserData(ctx context.Context, id int) (response.UserDat
 	if err != nil {
 		return userdata, fmt.Errorf("failed to get user data: %w", err)
 	}
+
+	if userdata.ID == 0 {
+		return userdata, fmt.Errorf("user with id %d not found", id)
+	}
+
+	var permissions []model.Permission
+	if err := s.db.WithContext(ctx).
+		Table("permission p").
+		Select("p.name AS name").
+		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
+		Where("rhp.role_id = ? AND p.name IN ?", userdata.RoleID, []string{
+			"add.payroll", "edit.payroll", "add.backup", "view.backup",
+			"view.download.backup", "delete.backup", "add.company",
+			"edit.company", "edit.user", "add.user",
+		}).
+		Scan(&permissions).Error; err != nil {
+		return userdata, fmt.Errorf("failed to get user permissions: %w", err)
+	}
+
+	userdata.Permissions = permissions
 
 	return userdata, nil
 }
