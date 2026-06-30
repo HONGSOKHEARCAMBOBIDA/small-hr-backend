@@ -92,3 +92,42 @@ func (cr *AttendanceController) GetAttendanceDraft(c *gin.Context) {
 	}
 	share.RespondDate(c, http.StatusOK, data)
 }
+
+func (cr *AttendanceController) GetAttendancePDF(c *gin.Context) {
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
+
+	filter := map[string]string{
+		"name":       c.Query("name"),
+		"company_id": c.Query("company_id"),
+		"role_id":    c.Query("role_id"),
+		"check_date": c.Query("check_date"),
+	}
+
+	attendances, metadata, err := cr.service.GetAttendancePDF(c, userID, request.Pagination{
+		Page:     page,
+		PageSize: pageSize,
+	}, filter)
+
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"data":       attendances,
+		"pagination": metadata,
+	})
+}

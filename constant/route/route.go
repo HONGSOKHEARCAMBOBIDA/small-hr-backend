@@ -36,11 +36,12 @@ const (
 	EditAttendance      = "edit.attendance"
 
 	// Payroll
-	AddPayroll       = "add.payroll"
-	ViewPayroll      = "view.payroll"
-	ViewPayrollDraft = "view.payroll.draft"
-	EditPayroll      = "edit.payroll"
-	DeletePayroll    = "delete.payroll"
+	AddPayroll            = "add.payroll"
+	ViewPayroll           = "view.payroll"
+	ViewPayrollDraft      = "view.payroll.draft"
+	EditPayroll           = "edit.payroll"
+	DeletePayroll         = "delete.payroll"
+	GenerateAttendancePDF = "generate.attendance.pdf"
 
 	// Role
 	ViewRole = "view.role"
