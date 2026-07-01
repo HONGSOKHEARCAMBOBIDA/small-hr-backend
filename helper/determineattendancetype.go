@@ -3,7 +3,7 @@ package helper
 import "time"
 
 func DetermineAttendanceType(actual, scheduled string, isCheckIn bool) int {
-	const gracePeriod = 5 * time.Minute
+	const gracePeriod = 30 * time.Second
 
 	actualT, err1 := time.Parse("15:04:05", actual)
 	scheduledT, err2 := time.Parse("15:04:05", scheduled)

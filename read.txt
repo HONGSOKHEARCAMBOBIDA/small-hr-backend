@@ -32,3 +32,102 @@ ALTER TABLE company ADD COLUMN color VARCHAR(7) DEFAULT '#000000';
 ALTER TABLE attendance add column payroll_id int
 ALTER TABLE permission
 ADD UNIQUE INDEX idx_permission_name (name);
+
+//
+
+CREATE TABLE `deduct_types` ( 
+  `id` INT AUTO_INCREMENT NOT NULL,
+  `code` VARCHAR(250) NULL DEFAULT NULL ,
+  `name` VARCHAR(250) NULL DEFAULT NULL ,
+  `is_active` TINYINT NULL DEFAULT 1 ,
+   PRIMARY KEY (`id`)
+)
+ENGINE = InnoDB;
+
+INSERT INTO `deduct_types` (`id`, `code`, `name`, `is_active`) VALUES
+(1, 'FIXED', 'កាត់ប្រាក់ខែជាចំនួនថេរ', 1),
+(2, 'PERCENT', 'កាត់ប្រាក់ខែជាភាគរយ', 1),
+(3, 'FULL-DAY', 'កាត់ប្រាក់ខែមួយថ្ងៃពេញ', 1),
+(4, 'TOTAL', 'កាត់ប្រាក់ខែសរុប', 1),
+(5, 'NONE', 'មិនកាត់ប្រាក់ខែ', 1),
+(7, 'ROUNDED_UP', 'កាត់ប្រាក់ខែដោយបង្គត់ឡេីង', 1);
+
+CREATE TABLE `leave_types` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(250) NOT NULL,
+    `deduct_type_id` INT NOT NULL,
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+
+    PRIMARY KEY (`id`),
+
+    INDEX `idx_leave_types_deduct_type_id` (`deduct_type_id`),
+
+    CONSTRAINT `fk_leave_types_deduct_type`
+        FOREIGN KEY (`deduct_type_id`)
+        REFERENCES `deduct_types` (`id`)
+        ON DELETE RESTRICT
+        ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `leave_duration_units` ( 
+  `id` TINYINT UNSIGNED AUTO_INCREMENT NOT NULL,
+  `code` VARCHAR(10) NOT NULL,
+  `name_en` VARCHAR(50) NOT NULL,
+  `name_km` VARCHAR(50) NOT NULL,
+  `to_minutes` INT NOT NULL,
+  `sort_order` TINYINT NOT NULL DEFAULT 0 ,
+   PRIMARY KEY (`id`),
+  CONSTRAINT `code` UNIQUE (`code`)
+)
+ENGINE = InnoDB;
+
+INSERT INTO `leave_duration_units` (`id`, `code`, `name_en`, `name_km`, `to_minutes`, `sort_order`) VALUES
+(1, 'minute', 'Minute', 'នាទី', 1, 1),
+(2, 'hour', 'Hour', 'ម៉ោង', 60, 2),
+(3, 'day', 'Day', 'ថ្ងៃ', 480, 3),
+(4, 'month', 'Month', 'ខែ', 9600, 4),
+(5, 'year', 'Year', 'ឆ្នាំ', 115200, 5);
+
+CREATE TABLE `leaves` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `user_id` INT NOT NULL,
+  `leave_type_id` INT NOT NULL,
+  `start_date` DATE NOT NULL,
+  `end_date` DATE NOT NULL,
+  `back_date` DATE DEFAULT NULL,
+  `description` VARCHAR(250) DEFAULT NULL,
+  `status` INT NOT NULL,
+  `approve_by_id` INT DEFAULT NULL,
+
+  PRIMARY KEY (`id`),
+
+  CONSTRAINT `fk_leaves_user`
+    FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
+    ON DELETE RESTRICT ON UPDATE RESTRICT,
+
+  CONSTRAINT `fk_leaves_leave_type`
+    FOREIGN KEY (`leave_type_id`) REFERENCES `leave_types` (`id`)
+    ON DELETE RESTRICT ON UPDATE RESTRICT
+
+) ENGINE=InnoDB;
+
+CREATE TABLE `leave_durations` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `leave_id` INT NOT NULL,
+  `duration_value` DECIMAL(10,2) NOT NULL,
+  `duration_unit_id` TINYINT UNSIGNED NOT NULL,
+
+  PRIMARY KEY (`id`),
+
+  CONSTRAINT `fk_leave_durations_leave`
+    FOREIGN KEY (`leave_id`)
+    REFERENCES `leaves` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE RESTRICT,
+
+  CONSTRAINT `fk_leave_durations_unit`
+    FOREIGN KEY (`duration_unit_id`)
+    REFERENCES `leave_duration_units` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE RESTRICT
+) ENGINE=InnoDB;

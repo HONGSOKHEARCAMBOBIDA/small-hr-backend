@@ -612,7 +612,6 @@ func (s *attendanceservice) GetAttendancePDF(ctx context.Context, id int, pf req
 		return nil, nil, err
 	}
 
-	// pivot records (type 1-4) into columns on the matching attendance row
 	reasonsByAttendanceID := make(map[int][]string, len(attendance))
 
 	for i := range attendancerecords {
