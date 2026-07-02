@@ -31,7 +31,10 @@ func main() {
 
 	// Apply CORS middleware
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"}, // your frontend origin
+		AllowOrigins: []string{
+			"https://192-241-132-206.nip.io",
+			"https://smallhrfrontend.vercel.app",
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "x-api-key", "X-Admin-Token"},
 		ExposeHeaders:    []string{"Content-Length"},
