@@ -710,6 +710,9 @@ func (s *authservice) UpdateUser(ctx context.Context, input request.UserRequestU
 			return err
 		}
 	} else if *input.ManageCompany == 2 {
+		if err := tx.Where("user_id =?", id).Delete(&model.UserCompany{}).Error; err != nil {
+			return err
+		}
 		for _, cid := range input.CompanyIDs {
 			if cid == nil {
 				return errors.New("company_ids must not contain null values")
@@ -845,7 +848,8 @@ func (s *authservice) GetUserData(ctx context.Context, id int) (response.UserDat
 		Where("rhp.role_id = ? AND p.name IN ?", userdata.RoleID, []string{
 			"add.payroll", "edit.payroll", "add.backup", "view.backup",
 			"view.download.backup", "delete.backup", "add.company",
-			"edit.company", "edit.user", "add.user",
+			"edit.company", "edit.user", "add.user", "edit.leave.type",
+			"add.leave.type",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return userdata, fmt.Errorf("failed to get user permissions: %w", err)

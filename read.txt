@@ -35,99 +35,147 @@ ADD UNIQUE INDEX idx_permission_name (name);
 
 //
 
-CREATE TABLE `deduct_types` ( 
-  `id` INT AUTO_INCREMENT NOT NULL,
-  `code` VARCHAR(250) NULL DEFAULT NULL ,
-  `name` VARCHAR(250) NULL DEFAULT NULL ,
-  `is_active` TINYINT NULL DEFAULT 1 ,
-   PRIMARY KEY (`id`)
-)
-ENGINE = InnoDB;
+CREATE TABLE leave_deduct_type (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(20) NOT NULL UNIQUE COMMENT 'FULL, HALF_AM, HALF_PM',
+    name VARCHAR(100) NOT NULL,
+    deduct_value DECIMAL(4,2) NOT NULL COMMENT '1.00, 0.50, 0.50',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `deduct_types` (`id`, `code`, `name`, `is_active`) VALUES
-(1, 'FIXED', 'កាត់ប្រាក់ខែជាចំនួនថេរ', 1),
-(2, 'PERCENT', 'កាត់ប្រាក់ខែជាភាគរយ', 1),
-(3, 'FULL-DAY', 'កាត់ប្រាក់ខែមួយថ្ងៃពេញ', 1),
-(4, 'TOTAL', 'កាត់ប្រាក់ខែសរុប', 1),
-(5, 'NONE', 'មិនកាត់ប្រាក់ខែ', 1),
-(7, 'ROUNDED_UP', 'កាត់ប្រាក់ខែដោយបង្គត់ឡេីង', 1);
+INSERT INTO leave_deduct_type (
+    code,
+    name,
+    deduct_value,
+    is_active
+) VALUES
+('FULL', 'ពេញមួយថ្ងៃ', 1.00, 1),
+('HALF_AM', 'កាត់មួយព្រឹក', 0.50, 1),
+('HALF_PM', 'កាត់មួយរសៀល', 0.50, 1);
 
-CREATE TABLE `leave_types` (
-    `id` INT NOT NULL AUTO_INCREMENT,
-    `name` VARCHAR(250) NOT NULL,
-    `deduct_type_id` INT NOT NULL,
-    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
 
-    PRIMARY KEY (`id`),
+CREATE TABLE leave_type (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
 
-    INDEX `idx_leave_types_deduct_type_id` (`deduct_type_id`),
+    CONSTRAINT uq_leave_type_company_code
+        UNIQUE (company_id, code),
 
-    CONSTRAINT `fk_leave_types_deduct_type`
-        FOREIGN KEY (`deduct_type_id`)
-        REFERENCES `deduct_types` (`id`)
+    INDEX idx_leave_type_company (company_id),
+
+    CONSTRAINT fk_leave_type_company
+        FOREIGN KEY (company_id)
+        REFERENCES company(id)
+        ON UPDATE CASCADE
         ON DELETE RESTRICT
-        ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `leave_duration_units` ( 
-  `id` TINYINT UNSIGNED AUTO_INCREMENT NOT NULL,
-  `code` VARCHAR(10) NOT NULL,
-  `name_en` VARCHAR(50) NOT NULL,
-  `name_km` VARCHAR(50) NOT NULL,
-  `to_minutes` INT NOT NULL,
-  `sort_order` TINYINT NOT NULL DEFAULT 0 ,
-   PRIMARY KEY (`id`),
-  CONSTRAINT `code` UNIQUE (`code`)
-)
-ENGINE = InnoDB;
+INSERT INTO leave_type (company_id, code, name, is_active) VALUES
+(1, 'SICK', 'ច្បាប់ឈឺ', 1),
+(1, 'ESSENTIAL_DUTY', 'ច្បាប់មានភារកិច្ចចាំបាច់', 1),
+(1, 'NORMAL', 'ច្បាប់ធម្មតា', 1);
 
-INSERT INTO `leave_duration_units` (`id`, `code`, `name_en`, `name_km`, `to_minutes`, `sort_order`) VALUES
-(1, 'minute', 'Minute', 'នាទី', 1, 1),
-(2, 'hour', 'Hour', 'ម៉ោង', 60, 2),
-(3, 'day', 'Day', 'ថ្ងៃ', 480, 3),
-(4, 'month', 'Month', 'ខែ', 9600, 4),
-(5, 'year', 'Year', 'ឆ្នាំ', 115200, 5);
 
-CREATE TABLE `leaves` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `user_id` INT NOT NULL,
-  `leave_type_id` INT NOT NULL,
-  `start_date` DATE NOT NULL,
-  `end_date` DATE NOT NULL,
-  `back_date` DATE DEFAULT NULL,
-  `description` VARCHAR(250) DEFAULT NULL,
-  `status` INT NOT NULL,
-  `approve_by_id` INT DEFAULT NULL,
+CREATE TABLE leave_request (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    leave_type_id INT NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    back_to_work_date DATE NOT NULL,
+    total_day DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    reason TEXT,
+    status TINYINT,
+    approve_by INT NULL,
+    approved_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
 
-  PRIMARY KEY (`id`),
+    CONSTRAINT fk_leave_request_user
+        FOREIGN KEY (user_id)
+        REFERENCES user(id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
 
-  CONSTRAINT `fk_leaves_user`
-    FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
-    ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT fk_leave_request_leave_type
+        FOREIGN KEY (leave_type_id)
+        REFERENCES leave_type(id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
 
-  CONSTRAINT `fk_leaves_leave_type`
-    FOREIGN KEY (`leave_type_id`) REFERENCES `leave_types` (`id`)
-    ON DELETE RESTRICT ON UPDATE RESTRICT
+    CONSTRAINT fk_leave_request_approver
+        FOREIGN KEY (approve_by)
+        REFERENCES user(id)
+        ON UPDATE CASCADE
+        ON DELETE SET NULL,
 
-) ENGINE=InnoDB;
+    INDEX idx_leave_request_user (user_id),
+    INDEX idx_leave_request_leave_type (leave_type_id),
+    INDEX idx_leave_request_status (status),
+    INDEX idx_leave_request_start_date (start_date),
+    INDEX idx_leave_request_end_date (end_date),
+    INDEX idx_leave_request_approver (approve_by)
+) ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `leave_durations` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `leave_id` INT NOT NULL,
-  `duration_value` DECIMAL(10,2) NOT NULL,
-  `duration_unit_id` TINYINT UNSIGNED NOT NULL,
 
-  PRIMARY KEY (`id`),
+CREATE TABLE leave_request_detail (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    leave_request_id INT NOT NULL,
+    leave_date DATE NOT NULL,
+    deduct_type_id TINYINT UNSIGNED NOT NULL,
 
-  CONSTRAINT `fk_leave_durations_leave`
-    FOREIGN KEY (`leave_id`)
-    REFERENCES `leaves` (`id`)
-    ON DELETE CASCADE
-    ON UPDATE RESTRICT,
+    CONSTRAINT fk_lrd_leave_request
+        FOREIGN KEY (leave_request_id)
+        REFERENCES leave_request(id)
+        ON DELETE CASCADE,
 
-  CONSTRAINT `fk_leave_durations_unit`
-    FOREIGN KEY (`duration_unit_id`)
-    REFERENCES `leave_duration_units` (`id`)
-    ON DELETE RESTRICT
-    ON UPDATE RESTRICT
-) ENGINE=InnoDB;
+    CONSTRAINT fk_lrd_deduct_type
+        FOREIGN KEY (deduct_type_id)
+        REFERENCES leave_deduct_type(id)
+        ON DELETE RESTRICT
+);
+
+INSERT INTO
+  `permission` (`name`, `display_name`, `is_active`)
+VALUES
+  ( "view.leave.deduct.type", "view.leave.deduct.type", 1)
+
+
+INSERT INTO `role_permission` (`role_id`, `permission_id`)
+VALUES
+  (1, 17),
+  (2, 17),
+  (3, 17),
+  (4, 17);
+
+INSERT INTO `permission` (`name`, `display_name`, `is_active`)
+VALUES
+  ('view.leave.type', 'View Leave Type', TRUE),
+  ('add.leave.type', 'Add Leave Type', TRUE),
+  ('edit.leave.type', 'Edit Leave Type', TRUE);
+
+
+INSERT INTO `role_permission` (`role_id`, `permission_id`)
+VALUES
+  (1, 18),
+  (2, 18),
+  (3, 18),
+  (4, 18);
+
+INSERT INTO `role_permission` (`role_id`, `permission_id`)
+VALUES
+  (1, 19),
+  (2, 19),
+  (3, 19);
+
+INSERT INTO `role_permission` (`role_id`, `permission_id`)
+VALUES
+  (1, 20),
+  (2, 20),
+  (3, 20);

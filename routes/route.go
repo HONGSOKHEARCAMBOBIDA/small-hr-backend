@@ -16,6 +16,8 @@ func SetupRoutes(r *gin.Engine) {
 	attendancecontroller := controller.NewAttendanceController()
 	payrollcontroller := controller.NewPayrollController()
 	backupcontroller := controller.NewBackupController()
+	leavededucttypecontroller := controller.NewLeaveDeductTypeController()
+	leavetypecontroller := controller.NewLeaveTypeController()
 	r.Static("/clientimage", "./public/clientimage")
 	public := r.Group("/")
 	public.Use(middleware.APIKeyAuth())
@@ -68,5 +70,13 @@ func SetupRoutes(r *gin.Engine) {
 		auth.GET(route.ViewBackup, middleware.PermissionMiddleware(permission.ViewBackup), backupcontroller.ListBackups)
 		auth.GET(route.DownloadBackup, middleware.PermissionMiddleware(permission.DownloadBackup), backupcontroller.DownloadBackup)
 		auth.DELETE(route.DeleteBackup, middleware.PermissionMiddleware(permission.DeleteBackup), backupcontroller.DeleteBackup)
+
+		// LeaveDeductType
+		auth.GET(route.ViewLeaveDeductType, middleware.PermissionMiddleware(permission.ViewLeaveDeductType), leavededucttypecontroller.GetLeaveDeductType)
+
+		// LeaveType
+		auth.GET(route.ViewLeave, middleware.PermissionMiddleware(permission.ViewLeave), leavetypecontroller.GetLeaveTypes)
+		auth.POST(route.AddLeaveType, middleware.PermissionMiddleware(permission.AddLeaveType), leavetypecontroller.CreateLeaveType)
+		auth.PUT(route.EditLeaveType, middleware.PermissionMiddleware(permission.EditLeaveType), leavetypecontroller.UpdateLeaveType)
 	}
 }
