@@ -32,22 +32,18 @@ func NewPayrollService() PayrollService {
 
 func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, company_id int) ([]response.PayrollDraftResponse, error) {
 
-	// var user model.User
-	// if err := s.db.WithContext(ctx).First(&user, id).Error; err != nil {
-	// 	return nil, fmt.Errorf("user not found: %w", err)
-	// }
-
 	type rawRow struct {
-		UserID           int
-		UserName         string
-		RoleName         string
-		BasicSalary      string
-		Currency         string
-		LatePenalty      string
-		LeftEarlyPenalty string
-		TotalWorkDay     int
-		TotalLate        int
-		TotalLeftEarly   int
+		UserID              int
+		UserName            string
+		RoleName            string
+		BasicSalary         string
+		Currency            string
+		LatePenalty         string
+		LeftEarlyPenalty    string
+		CompanyTotalWorkDay int // <-- from company.total_work_day, used as denominator for per-day rate
+		TotalWorkDay        int
+		TotalLate           int
+		TotalLeftEarly      int
 	}
 
 	var rows []rawRow
@@ -61,6 +57,7 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 			c.currency                  AS currency,
 			c.late_penalty              AS late_penalty,
 			c.left_early_penalty        AS left_early_penalty,
+			c.total_work_day            AS company_total_work_day,
 			COUNT(DISTINCT CASE WHEN             a.is_paid = false THEN a.id END) AS total_work_day,
 			COUNT(DISTINCT CASE WHEN ar.attendance_type = 3 AND a.is_paid = false THEN ar.id END) AS total_late,
 			COUNT(DISTINCT CASE WHEN ar.attendance_type = 4 AND a.is_paid = false THEN ar.id END) AS total_left_early
@@ -69,13 +66,11 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 		LEFT JOIN company c ON c.id = u.company_id
 		LEFT JOIN attendance a ON a.user_id = u.id
 		LEFT JOIN attendance_record ar ON ar.attendance_id = a.id
-		LEFT JOIN leave_request l ON l.user_id = u.id AND l.status = 2
-
 		WHERE u.company_id = ?
 		  AND u.is_active   = true
 		GROUP BY
 			u.id, u.name, r.display_name, u.base_salary,
-			c.currency, c.late_penalty, c.left_early_penalty
+			c.currency, c.late_penalty, c.left_early_penalty, c.total_work_day
 	`, company_id).Scan(&rows).Error
 
 	if err != nil {
@@ -96,6 +91,7 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 		userIDs = append(userIDs, r.UserID)
 	}
 
+	// ---------- unpaid attendance (existing) ----------
 	type unpaidRow struct {
 		UserID       int
 		AttendanceID int
@@ -124,6 +120,40 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 		})
 	}
 
+	// ---------- leave deduction (NEW) ----------
+	type leaveRow struct {
+		UserID      int
+		TotalDay    float64
+		DeductValue float64
+	}
+
+	var leaveRows []leaveRow
+	if len(userIDs) > 0 {
+		err = s.db.WithContext(ctx).Raw(`
+			SELECT
+				lr.user_id       AS user_id,
+				lr.total_day     AS total_day,
+				ldt.deduct_value AS deduct_value
+			FROM leave_request lr
+			JOIN leave_type lt        ON lt.id = lr.leave_type_id AND lt.is_deduct = true
+			JOIN leave_deduct_type ldt ON ldt.id = lr.deduct_type_id
+			WHERE lr.user_id IN (?)
+			  AND lr.payroll_id IS NULL
+			  AND lr.status = 2
+		`, userIDs).Scan(&leaveRows).Error
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch leave deduction records: %w", err)
+		}
+	}
+
+	// sum weighted leave days per user: total_day * deduct_value
+	leaveDaysByUser := make(map[int]float64)
+	for _, l := range leaveRows {
+		leaveDaysByUser[l.UserID] += l.TotalDay * l.DeductValue
+	}
+
+	// ---------- build final payroll ----------
 	payrolls := make([]response.PayrollDraftResponse, 0, len(rows))
 
 	for _, row := range rows {
@@ -133,8 +163,17 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 		latePenaltyF := helper.ParseFloat(row.LatePenalty)
 		leftEarlyPenaltyF := helper.ParseFloat(row.LeftEarlyPenalty)
 
-		totalDeduction := (latePenaltyF * float64(row.TotalLate)) +
+		attendanceDeduction := (latePenaltyF * float64(row.TotalLate)) +
 			(leftEarlyPenaltyF * float64(row.TotalLeftEarly))
+
+		// per-day salary rate = basic salary / company's standard work days
+		var leaveDeduction float64
+		if row.CompanyTotalWorkDay > 0 {
+			perDayRate := basicSalaryF / float64(row.CompanyTotalWorkDay)
+			leaveDeduction = perDayRate * leaveDaysByUser[row.UserID]
+		}
+
+		totalDeduction := attendanceDeduction + leaveDeduction
 
 		netSalary := basicSalaryF - totalDeduction
 		if payrolltype == 2 {
@@ -150,6 +189,8 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 			TotalWorkDay:          row.TotalWorkDay,
 			TotalLate:             row.TotalLate,
 			TotalLeftEarly:        row.TotalLeftEarly,
+			TotalLeaveDay:         leaveDaysByUser[row.UserID],        // new field
+			LeaveDeduction:        helper.FormatFloat(leaveDeduction), // new field
 			TotalDeduction:        helper.FormatFloat(totalDeduction),
 			NetSalary:             helper.FormatFloat(netSalary),
 			Currency:              row.Currency,

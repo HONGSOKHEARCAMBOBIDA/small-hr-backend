@@ -11,6 +11,7 @@ type PayrollDraftResponse struct {
 	Other                 string                  `json:"other"`
 	TotalLate             int                     `json:"total_late"`
 	TotalLeftEarly        int                     `json:"total_left_early"`
+	TotalLeaveDay         float64                 `json:"total_leave_day"`
 	TotalWorkDay          int                     `json:"total_work_day"`
 	LeaveDeduction        string                  `json:"leave_deduction"`
 	TotalDeduction        string                  `json:"total_deduction"`
