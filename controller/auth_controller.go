@@ -242,3 +242,17 @@ func (cr *AuthController) GetUserData(c *gin.Context) {
 	}
 	share.RespondDate(c, http.StatusOK, data)
 }
+
+func (cr *AuthController) GetUserApprove(c *gin.Context) {
+	userlog, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "invalid user context")
+		return
+	}
+	data, err := cr.service.GetUserApprove(c, userlog)
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.RespondDate(c, http.StatusOK, data)
+}

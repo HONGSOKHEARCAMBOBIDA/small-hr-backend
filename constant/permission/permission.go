@@ -35,4 +35,10 @@ const (
 	ViewLeave     = "view.leave.type"
 	AddLeaveType  = "add.leave.type"
 	EditLeaveType = "edit.leave.type"
+
+	// LeaveRequest
+	ViewLeaveRequest       = "view.leave.request"
+	AddLeaveRequest        = "add.leave.request"
+	EditLeaveRequest       = "edit.leave.request"
+	EditStatusLeaveRequest = "edit.status.leave.request"
 )

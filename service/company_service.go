@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"mysql/config"
 	"mysql/helper"
 	"mysql/model"
@@ -74,6 +73,7 @@ func (s *companyservice) GetCompany(id int, ctx context.Context, pf request.Pagi
 		c.left_early_penalty AS left_early_penalty,
 		c.can_scan_outsize AS can_scan_outsize,
 		c.color AS color,
+		c.total_work_day AS total_work_day,
 		COUNT(u.id) AS user_count
 	`).Joins("LEFT JOIN user AS u ON u.company_id = c.id").
 		Group("c.id")
@@ -133,7 +133,6 @@ func (s *companyservice) CreateCompany(ctx context.Context, input request.Compan
 	}
 	chatID, err := utils.ResolveTelegramChatID(input.BotToken, input.GroupLink)
 	if err != nil {
-		log.Printf(err.Error())
 		tx.Rollback()
 		return fmt.Errorf("could not resolve group link: %w", err)
 	}
@@ -165,6 +164,7 @@ func (s *companyservice) CreateCompany(ctx context.Context, input request.Compan
 		LeftEarlyPenalty: input.LeftEarlyPenalty,
 		CanScanOutsize:   input.CanScanOutsize,
 		Color:            input.Color,
+		TotalWorkDay:     input.TotalWorkDay,
 	}
 
 	if err := tx.WithContext(ctx).
@@ -215,6 +215,9 @@ func (s *companyservice) UpdateCompany(ctx context.Context, id int, input reques
 	}
 	if input.Color != nil {
 		updates["color"] = *input.Color
+	}
+	if input.TotalWorkDay != nil {
+		updates["total_work_day"] = *input.TotalWorkDay
 	}
 	if len(updates) == 0 {
 		return errors.New(" no field to update")

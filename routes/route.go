@@ -18,6 +18,7 @@ func SetupRoutes(r *gin.Engine) {
 	backupcontroller := controller.NewBackupController()
 	leavededucttypecontroller := controller.NewLeaveDeductTypeController()
 	leavetypecontroller := controller.NewLeaveTypeController()
+	leaverequestcontroller := controller.NewLeaveRequestController()
 	r.Static("/clientimage", "./public/clientimage")
 	public := r.Group("/")
 	public.Use(middleware.APIKeyAuth())
@@ -48,6 +49,7 @@ func SetupRoutes(r *gin.Engine) {
 		auth.GET(route.ViewRole, middleware.PermissionMiddleware(permission.ViewUser), authcontroller.GetRole)
 		auth.DELETE(route.DeleteUser, middleware.PermissionMiddleware(permission.EditUser), authcontroller.DeleteUser)
 		auth.GET(route.ViewUserData, middleware.PermissionMiddleware(permission.ViewUser), authcontroller.GetUserData)
+		auth.GET(route.ViewUserApprove, middleware.PermissionMiddleware(permission.ViewUser), authcontroller.GetUserApprove)
 
 		// Shift
 		auth.PUT(route.EditShift, middleware.PermissionMiddleware(permission.EditUser), shiftcontroller.UpdateShift)
@@ -78,5 +80,11 @@ func SetupRoutes(r *gin.Engine) {
 		auth.GET(route.ViewLeave, middleware.PermissionMiddleware(permission.ViewLeave), leavetypecontroller.GetLeaveTypes)
 		auth.POST(route.AddLeaveType, middleware.PermissionMiddleware(permission.AddLeaveType), leavetypecontroller.CreateLeaveType)
 		auth.PUT(route.EditLeaveType, middleware.PermissionMiddleware(permission.EditLeaveType), leavetypecontroller.UpdateLeaveType)
+
+		// LeaveRequest
+		auth.GET(route.ViewLeaveRequest, middleware.PermissionMiddleware(permission.ViewLeaveRequest), leaverequestcontroller.GetLeaveRequest)
+		auth.POST(route.AddLeaveRequest, middleware.PermissionMiddleware(permission.AddLeaveRequest), leaverequestcontroller.CreateLeaveRequest)
+		auth.PUT(route.EditLeaveRequest, middleware.PermissionMiddleware(permission.EditLeaveRequest), leaverequestcontroller.UpdateLeaveRequest)
+		auth.PUT(route.EditStatusLeaveRequest, middleware.PermissionMiddleware(permission.EditStatusLeaveRequest), leaverequestcontroller.UpdateStatusLeaveRequest)
 	}
 }

@@ -33,7 +33,7 @@ ALTER TABLE attendance add column payroll_id int
 ALTER TABLE permission
 ADD UNIQUE INDEX idx_permission_name (name);
 
-//
+//2026/07/03
 
 CREATE TABLE leave_deduct_type (
     id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -87,6 +87,7 @@ CREATE TABLE leave_request (
     end_date DATE NOT NULL,
     back_to_work_date DATE NOT NULL,
     total_day DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    deduct_type_id INT,
     reason TEXT,
     status TINYINT,
     approve_by INT NULL,
@@ -179,3 +180,40 @@ VALUES
   (1, 20),
   (2, 20),
   (3, 20);
+
+INSERT INTO `permission` (`name`, `display_name`, `is_active`)
+VALUES
+  ('view.leave.request', 'View Leave Request', TRUE),
+  ('add.leave.request', 'Add Leave Request', TRUE),
+  ('edit.leave.request', 'Edit Leave Request', TRUE),
+  ('edit.status.leave.request', 'Edit Status Leave Request', TRUE);
+
+INSERT INTO `role_permission` (`role_id`, `permission_id`)
+VALUES
+  (1, 21),
+  (2, 21),
+  (3, 21),
+  (4, 21);
+
+INSERT INTO `role_permission` (`role_id`, `permission_id`)
+VALUES
+  (1, 22),
+  (2, 22),
+  (3, 22),
+  (4, 22);
+
+INSERT INTO `role_permission` (`role_id`, `permission_id`)
+VALUES
+  (1, 23),
+  (2, 23),
+  (3, 23),
+  (4, 23);
+
+INSERT INTO `role_permission` (`role_id`, `permission_id`)
+VALUES
+  (3, 24),
+  (4, 24);
+
+ALTER TABLE company add column total_work_day TINYINT
+
+ALTER TABLE leave_request add column payroll_id int after approve_by

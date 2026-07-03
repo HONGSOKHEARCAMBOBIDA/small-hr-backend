@@ -37,6 +37,7 @@ type AuthService interface {
 	GetRole(ctx context.Context, id int) ([]model.Role, error)
 	DeleteUser(ctx context.Context, id int, userIDlogin int) error
 	GetUserData(ctx context.Context, id int) (response.UserDataResponse, error)
+	GetUserApprove(ctx context.Context, id int) ([]response.UserApprove, error)
 }
 
 type authservice struct {
@@ -849,7 +850,7 @@ func (s *authservice) GetUserData(ctx context.Context, id int) (response.UserDat
 			"add.payroll", "edit.payroll", "add.backup", "view.backup",
 			"view.download.backup", "delete.backup", "add.company",
 			"edit.company", "edit.user", "add.user", "edit.leave.type",
-			"add.leave.type",
+			"add.leave.type", "edit.leave.request", "edit.status.leave.request",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return userdata, fmt.Errorf("failed to get user permissions: %w", err)
@@ -858,4 +859,31 @@ func (s *authservice) GetUserData(ctx context.Context, id int) (response.UserDat
 	userdata.Permissions = permissions
 
 	return userdata, nil
+}
+
+func (s *authservice) GetUserApprove(ctx context.Context, id int) ([]response.UserApprove, error) {
+	var user model.User
+	if err := s.db.WithContext(ctx).
+		Preload("Role").
+		Preload("Company").
+		First(&user, id).Error; err != nil {
+		return nil, err
+	}
+
+	var userApproves []response.UserApprove
+	err := s.db.WithContext(ctx).
+		Table("user u").
+		Select(`
+			u.id AS id,
+			u.name AS user_name,
+			u.company_id
+		`).
+		Joins("JOIN role r ON r.id = u.role_id").
+		Where("u.company_id = ? AND r.level >= ?", user.CompanyID, user.Role.Level).
+		Scan(&userApproves).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return userApproves, nil
 }

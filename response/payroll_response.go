@@ -12,6 +12,7 @@ type PayrollDraftResponse struct {
 	TotalLate             int                     `json:"total_late"`
 	TotalLeftEarly        int                     `json:"total_left_early"`
 	TotalWorkDay          int                     `json:"total_work_day"`
+	LeaveDeduction        string                  `json:"leave_deduction"`
 	TotalDeduction        string                  `json:"total_deduction"`
 	NetSalary             string                  `json:"net_salary"`
 	Currency              string                  `json:"currency"`

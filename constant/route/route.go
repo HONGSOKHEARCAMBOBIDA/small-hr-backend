@@ -24,6 +24,7 @@ const (
 	CountUser        = "count.user"
 	DeleteUser       = "delete.user/:id"
 	ViewUserData     = "view.user.data"
+	ViewUserApprove  = "view.user.approve"
 
 	// Shift
 	EditShift = "edit.shift"
@@ -59,4 +60,10 @@ const (
 	ViewLeave     = "view.leave.type"
 	AddLeaveType  = "add.leave.type"
 	EditLeaveType = "edit.leave.type/:id"
+
+	// LeaveRequest
+	ViewLeaveRequest       = "view.leave.request"
+	AddLeaveRequest        = "add.leave.request"
+	EditLeaveRequest       = "edit.leave.request/:id"
+	EditStatusLeaveRequest = "edit.status.leave.request/:id"
 )

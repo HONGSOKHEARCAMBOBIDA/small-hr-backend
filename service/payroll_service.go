@@ -69,6 +69,7 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 		LEFT JOIN company c ON c.id = u.company_id
 		LEFT JOIN attendance a ON a.user_id = u.id
 		LEFT JOIN attendance_record ar ON ar.attendance_id = a.id
+		LEFT JOIN leave_request l ON l.user_id = u.id AND l.status = 2
 
 		WHERE u.company_id = ?
 		  AND u.is_active   = true

@@ -28,3 +28,8 @@ type UserResponse struct {
 type UserCount struct {
 	Total int `json:"total"`
 }
+
+type UserApprove struct {
+	ID       int    `json:"id"`
+	UserName string `json:"user_name"`
+}
