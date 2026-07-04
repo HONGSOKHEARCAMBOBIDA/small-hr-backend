@@ -417,7 +417,7 @@ func applyCommonFilterAttendance(query *gorm.DB, filter map[string]string) *gorm
 		case "role_id":
 			query = query.Where("u.role_id =?", value)
 		case "check_date":
-			query = query.Where("a.check_date =?", value)
+			query = query.Where("a.check_date >=?", value)
 		}
 	}
 	return query

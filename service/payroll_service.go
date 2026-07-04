@@ -3,12 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"mysql/config"
 	"mysql/helper"
 	"mysql/model"
 	"mysql/request"
 	"mysql/response"
+	"strconv"
 
 	"gorm.io/gorm"
 )
@@ -40,7 +40,7 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 		Currency            string
 		LatePenalty         string
 		LeftEarlyPenalty    string
-		CompanyTotalWorkDay int // <-- from company.total_work_day, used as denominator for per-day rate
+		CompanyTotalWorkDay int
 		TotalWorkDay        int
 		TotalLate           int
 		TotalLeftEarly      int
@@ -80,7 +80,6 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 	for i := range rows {
 		decrypted, err := helper.DecryptSalary(rows[i].BasicSalary)
 		if err != nil {
-			log.Printf(err.Error())
 			return nil, err
 		}
 		rows[i].BasicSalary = decrypted
@@ -91,7 +90,6 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 		userIDs = append(userIDs, r.UserID)
 	}
 
-	// ---------- unpaid attendance (existing) ----------
 	type unpaidRow struct {
 		UserID       int
 		AttendanceID int
@@ -120,8 +118,8 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 		})
 	}
 
-	// ---------- leave deduction (NEW) ----------
 	type leaveRow struct {
+		ID          int
 		UserID      int
 		TotalDay    float64
 		DeductValue float64
@@ -131,6 +129,7 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 	if len(userIDs) > 0 {
 		err = s.db.WithContext(ctx).Raw(`
 			SELECT
+				lr.id            AS id,
 				lr.user_id       AS user_id,
 				lr.total_day     AS total_day,
 				ldt.deduct_value AS deduct_value
@@ -147,13 +146,15 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 		}
 	}
 
-	// sum weighted leave days per user: total_day * deduct_value
 	leaveDaysByUser := make(map[int]float64)
+	unpaidleavebyUser := make(map[int][]response.CountUnPaidLeave)
 	for _, l := range leaveRows {
 		leaveDaysByUser[l.UserID] += l.TotalDay * l.DeductValue
+		unpaidleavebyUser[l.UserID] = append(unpaidleavebyUser[l.UserID], response.CountUnPaidLeave{
+			LeaveID: l.ID,
+		})
 	}
 
-	// ---------- build final payroll ----------
 	payrolls := make([]response.PayrollDraftResponse, 0, len(rows))
 
 	for _, row := range rows {
@@ -166,7 +167,6 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 		attendanceDeduction := (latePenaltyF * float64(row.TotalLate)) +
 			(leftEarlyPenaltyF * float64(row.TotalLeftEarly))
 
-		// per-day salary rate = basic salary / company's standard work days
 		var leaveDeduction float64
 		if row.CompanyTotalWorkDay > 0 {
 			perDayRate := basicSalaryF / float64(row.CompanyTotalWorkDay)
@@ -188,13 +188,16 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 			HalfSalary:            helper.FormatFloat(halfSalary),
 			TotalWorkDay:          row.TotalWorkDay,
 			TotalLate:             row.TotalLate,
+			TotalPenaltyLate:      strconv.FormatFloat(latePenaltyF*float64(row.TotalLate), 'f', 2, 64),
 			TotalLeftEarly:        row.TotalLeftEarly,
+			TotalLeftEarlyPenalty: strconv.FormatFloat(leftEarlyPenaltyF*float64(row.TotalLeftEarly), 'f', 2, 64),
 			TotalLeaveDay:         leaveDaysByUser[row.UserID],        // new field
 			LeaveDeduction:        helper.FormatFloat(leaveDeduction), // new field
 			TotalDeduction:        helper.FormatFloat(totalDeduction),
 			NetSalary:             helper.FormatFloat(netSalary),
 			Currency:              row.Currency,
 			CountUnPaidAttendance: unpaidByUser[row.UserID],
+			CountUnPaidLeave:      unpaidleavebyUser[row.UserID],
 		})
 	}
 
@@ -232,6 +235,19 @@ func (s *payrollservice) CreatePayroll(ctx context.Context, req request.PayrollR
 						"payroll_id": payroll.ID,
 					}).Error; err != nil {
 					return fmt.Errorf("failed to update attendance for user %d: %w", item.UserID, err)
+				}
+			}
+			if len(item.CountUnPaidLeave) > 0 {
+				leaveIDs := make([]int, 0, len(item.CountUnPaidLeave))
+				for _, r := range item.CountUnPaidLeave {
+					leaveIDs = append(leaveIDs, r.LeaveID)
+				}
+				if err := tx.Model(&model.LeaveRequest{}).
+					Where("id IN (?) AND user_id = ?", leaveIDs, item.UserID).
+					Updates(map[string]interface{}{
+						"payroll_id": payroll.ID,
+					}).Error; err != nil {
+					return fmt.Errorf("failed to update leave")
 				}
 			}
 		}
@@ -352,6 +368,13 @@ func (s *payrollservice) DeletePayroll(ctx context.Context, req request.PayrollR
 					"payroll_id": nil,
 				}).Error; err != nil {
 				return fmt.Errorf("failed to update attendance: %w", err)
+			}
+			if err := tx.Model(&model.LeaveRequest{}).
+				Where("payroll_id IN (?)", req.PayrollIDs).
+				Updates(map[string]interface{}{
+					"payroll_id": nil,
+				}).Error; err != nil {
+				return fmt.Errorf("faild to update leave")
 			}
 		}
 		return nil

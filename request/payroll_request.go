@@ -13,10 +13,15 @@ type PayrollRequestItem struct {
 	Status           int                `json:"status" gorm:"column:status"`
 	Note             string             `json:"note" gorm:"column:note"`
 	UnPaidAttendance []UnPaidAttendance `json:"attendance_id" gorm:"-"`
+	CountUnPaidLeave []CountUnPaidLeave `json:"leave_id" gorm:"-"`
 }
 
 type UnPaidAttendance struct {
 	AttendanceID int `json:"attendance_id"`
+}
+
+type CountUnPaidLeave struct {
+	LeaveID int `json:"leave_id"`
 }
 
 type PayrollRequestCreate struct {

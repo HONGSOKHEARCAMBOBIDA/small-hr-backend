@@ -66,4 +66,9 @@ const (
 	AddLeaveRequest        = "add.leave.request"
 	EditLeaveRequest       = "edit.leave.request/:id"
 	EditStatusLeaveRequest = "edit.status.leave.request/:id"
+
+	// RoleHasPermission
+	ViewRoleHasPermission   = "view.role.has.permission/:id"
+	AddRoleHasPermission    = "add.role.has.permission"
+	DeleteRoleHasPermission = "delete.role.has.permission"
 )

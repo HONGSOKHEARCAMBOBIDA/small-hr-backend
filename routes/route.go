@@ -19,6 +19,7 @@ func SetupRoutes(r *gin.Engine) {
 	leavededucttypecontroller := controller.NewLeaveDeductTypeController()
 	leavetypecontroller := controller.NewLeaveTypeController()
 	leaverequestcontroller := controller.NewLeaveRequestController()
+	rolehaspermissioncontroller := controller.NewRoleHasPermissionController()
 	r.Static("/clientimage", "./public/clientimage")
 	public := r.Group("/")
 	public.Use(middleware.APIKeyAuth())
@@ -47,7 +48,7 @@ func SetupRoutes(r *gin.Engine) {
 		auth.PUT(route.EditUser, middleware.PermissionMiddleware(permission.EditUser), authcontroller.UpdateUser)
 		auth.GET(route.CountUser, middleware.PermissionMiddleware(permission.ViewUser), authcontroller.CountUser)
 		auth.GET(route.ViewRole, middleware.PermissionMiddleware(permission.ViewUser), authcontroller.GetRole)
-		auth.DELETE(route.DeleteUser, middleware.PermissionMiddleware(permission.EditUser), authcontroller.DeleteUser)
+		//auth.DELETE(route.DeleteUser, middleware.PermissionMiddleware(permission.EditUser), authcontroller.DeleteUser)
 		auth.GET(route.ViewUserData, middleware.PermissionMiddleware(permission.ViewUser), authcontroller.GetUserData)
 		auth.GET(route.ViewUserApprove, middleware.PermissionMiddleware(permission.ViewUser), authcontroller.GetUserApprove)
 
@@ -86,5 +87,10 @@ func SetupRoutes(r *gin.Engine) {
 		auth.POST(route.AddLeaveRequest, middleware.PermissionMiddleware(permission.AddLeaveRequest), leaverequestcontroller.CreateLeaveRequest)
 		auth.PUT(route.EditLeaveRequest, middleware.PermissionMiddleware(permission.EditLeaveRequest), leaverequestcontroller.UpdateLeaveRequest)
 		auth.PUT(route.EditStatusLeaveRequest, middleware.PermissionMiddleware(permission.EditStatusLeaveRequest), leaverequestcontroller.UpdateStatusLeaveRequest)
+
+		// RoleHasPermission
+		auth.GET(route.ViewRoleHasPermission, middleware.PermissionMiddleware(permission.ViewRoleHasPermission), rolehaspermissioncontroller.GetRolePermission)
+		auth.POST(route.AddRoleHasPermission, middleware.PermissionMiddleware(permission.AddRoleHasPermission), rolehaspermissioncontroller.CreateRoleHasPermission)
+		auth.DELETE(route.DeleteRoleHasPermission, middleware.PermissionMiddleware(permission.DeleteRoleHasPermission), rolehaspermissioncontroller.DeleteRoleHasPermission)
 	}
 }

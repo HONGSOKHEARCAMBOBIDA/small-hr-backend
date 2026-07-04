@@ -10,7 +10,9 @@ type PayrollDraftResponse struct {
 	HalfSalary            string                  `json:"half_salary"`
 	Other                 string                  `json:"other"`
 	TotalLate             int                     `json:"total_late"`
+	TotalPenaltyLate      string                  `json:"total_penalty_late"`
 	TotalLeftEarly        int                     `json:"total_left_early"`
+	TotalLeftEarlyPenalty string                  `json:"total_left_early_penalty"`
 	TotalLeaveDay         float64                 `json:"total_leave_day"`
 	TotalWorkDay          int                     `json:"total_work_day"`
 	LeaveDeduction        string                  `json:"leave_deduction"`
@@ -18,10 +20,15 @@ type PayrollDraftResponse struct {
 	NetSalary             string                  `json:"net_salary"`
 	Currency              string                  `json:"currency"`
 	CountUnPaidAttendance []CountUnPaidAttendance `json:"unpaid_attendance"`
+	CountUnPaidLeave      []CountUnPaidLeave      `json:"leave_id"`
 }
 
 type CountUnPaidAttendance struct {
 	AttendanceID int `json:"attendance_id"`
+}
+
+type CountUnPaidLeave struct {
+	LeaveID int `json:"leave_id"`
 }
 
 type PayrollResponse struct {

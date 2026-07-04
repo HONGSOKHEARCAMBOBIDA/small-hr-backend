@@ -217,3 +217,15 @@ VALUES
 ALTER TABLE company add column total_work_day TINYINT
 
 ALTER TABLE leave_request add column payroll_id int after approve_by
+
+INSERT INTO `permission` (`name`, `display_name`, `is_active`)
+VALUES
+('view.role.has.permission', 'View Role Has Permission', 1),
+('add.role.has.permission', 'Add Role Has Permission', 1),
+('delete.role.has.permission', 'Delete Role Has Permission', 1);
+
+INSERT INTO `role_permission` (`role_id`, `permission_id`)
+VALUES
+  (1, 25),
+  (1, 26),
+  (1,27)
