@@ -46,6 +46,7 @@ const (
 
 	// Role
 	ViewRole = "view.role"
+	EditRole = "edit.role/:id"
 
 	// BackUp
 	CreateBackup   = "add.backup"

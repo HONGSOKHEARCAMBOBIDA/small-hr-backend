@@ -61,3 +61,22 @@ func (cr *RoleHasPermissionController) GetRolePermission(c *gin.Context) {
 	share.RespondDate(c, http.StatusOK, data)
 
 }
+
+func (cr *RoleHasPermissionController) UpdateRole(c *gin.Context) {
+	idparam := c.Param("id")
+	id, err := strconv.Atoi(idparam)
+	if err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	var input request.RoleRequestUpdate
+	if err := c.ShouldBindJSON(&input); err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := cr.service.UpdateRole(c, id, input); err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.ResponseSuccess(c, http.StatusOK, "Updated")
+}

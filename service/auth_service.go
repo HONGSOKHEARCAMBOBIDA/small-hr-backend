@@ -764,6 +764,7 @@ func (s *authservice) GetRole(ctx context.Context, id int) ([]model.Role, error)
 	roleQuery := s.db.WithContext(ctx).Table("role r").
 		Select(`
 		 r.id AS id,
+		 r.name AS name,
 		 r.display_name AS display_name
 	`)
 	roleQuery = helper.ApplyAccessGetRole(roleQuery, s.db, user.Role, user)
@@ -851,6 +852,7 @@ func (s *authservice) GetUserData(ctx context.Context, id int) (response.UserDat
 			"view.download.backup", "delete.backup", "add.company",
 			"edit.company", "edit.user", "add.user", "edit.leave.type",
 			"add.leave.type", "edit.leave.request", "edit.status.leave.request",
+			"add.role.has.permission",
 		}).
 		Scan(&permissions).Error; err != nil {
 		return userdata, fmt.Errorf("failed to get user permissions: %w", err)

@@ -16,6 +16,7 @@ type RoleService interface {
 	CreateRoleHasPermission(ctx context.Context, input request.CreateRolePermissionInput) error
 	DeleteRoleHasPermission(ctx context.Context, input request.DeleteRolePermissionsInput) error
 	GetRolePermission(ctx context.Context, id int) ([]response.PermissionWithAssignedRole, error)
+	UpdateRole(ctx context.Context, id int, input request.RoleRequestUpdate) error
 }
 
 type roleservice struct {
@@ -80,25 +81,44 @@ func (s *roleservice) GetRolePermission(ctx context.Context, id int) ([]response
 	}
 
 	var permissions []response.PermissionWithAssignedRole
-	err := s.db.WithContext(ctx).Table("permissions").
+	err := s.db.WithContext(ctx).Table("permission p").
 		Select(`
-            permissions.id AS id,
-            permissions.name AS name,
-            permissions.display_name AS display_name,
+            p.id AS id,
+            p.name AS name,
+            p.display_name AS display_name,
             CASE 
-                WHEN role_has_permissions.permission_id IS NULL THEN false 
+                WHEN role_permission.permission_id IS NULL THEN false 
                 ELSE true 
             END AS assigned
         `).
 		Joins(`
-            LEFT JOIN role_has_permissions 
-            ON permissions.id = role_has_permissions.permission_id 
-            AND role_has_permissions.role_id = ?
+            LEFT JOIN role_permission 
+            ON p.id = role_permission.permission_id 
+            AND role_permission.role_id = ?
         `, id).
-		Order("permissions.id ASC").
+		Order("p.id ASC").
 		Scan(&permissions).Error
 	if err != nil {
 		return nil, err
 	}
 	return permissions, nil
+}
+
+func (s *roleservice) UpdateRole(ctx context.Context, id int, input request.RoleRequestUpdate) error {
+	updates := map[string]interface{}{}
+
+	if input.Name != nil {
+		updates["name"] = *input.Name
+	}
+	if input.DisPlayName != nil {
+		updates["display_name"] = *input.DisPlayName
+	}
+	if len(updates) == 0 {
+		return errors.New(" no field to update")
+	}
+	result := s.db.WithContext(ctx).Model(&model.Role{}).Where("id =?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
 }
