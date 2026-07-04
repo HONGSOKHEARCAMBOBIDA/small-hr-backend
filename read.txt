@@ -49,9 +49,9 @@ INSERT INTO leave_deduct_type (
     deduct_value,
     is_active
 ) VALUES
-('FULL', 'ពេញមួយថ្ងៃ', 1.00, 1),
-('HALF_AM', 'កាត់មួយព្រឹក', 0.50, 1),
-('HALF_PM', 'កាត់មួយរសៀល', 0.50, 1);
+('FULL', 'ថ្ងៃ', 1.00, 1),
+('HALF_AM', 'ព្រឹក', 0.50, 1),
+('HALF_PM', 'រសៀល', 0.50, 1);
 
 
 CREATE TABLE leave_type (
@@ -211,8 +211,9 @@ VALUES
 
 INSERT INTO `role_permission` (`role_id`, `permission_id`)
 VALUES
-  (3, 24),
-  (4, 24);
+  (1, 24),
+  (2, 24),
+  (3, 24);
 
 ALTER TABLE company add column total_work_day TINYINT
 
