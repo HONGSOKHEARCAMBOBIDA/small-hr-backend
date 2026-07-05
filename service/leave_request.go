@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"mysql/config"
 	"mysql/helper"
 	"mysql/model"
 	"mysql/request"
 	"mysql/response"
+	"mysql/utils"
 	"time"
 
 	"gorm.io/gorm"
@@ -31,6 +33,75 @@ func NewLeaveRequestService() LeaveRequestService {
 }
 
 func (s *leaveRequestService) CreateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestCreate) error {
+	var user model.User
+	if err := s.db.WithContext(ctx).Preload("Company").First(&user, id).Error; err != nil {
+		return err
+	}
+
+	var approve model.User
+	if err := s.db.WithContext(ctx).First(&approve, input.ApproveBy).Error; err != nil {
+		return err
+	}
+
+	var leavetype model.LeaveType
+	if err := s.db.WithContext(ctx).First(&leavetype, input.LeaveTypeID).Error; err != nil {
+		return err
+	}
+
+	var deduction model.LeaveDeductType
+	if err := s.db.WithContext(ctx).First(&deduction, input.DeductTypeID).Error; err != nil {
+		return err
+	}
+
+	if user.Company.GroupChatID == nil || user.Company.BotToken == nil {
+		return errors.New("company telegram configuration is missing")
+	}
+
+	GroupChatIDDecrypt, err := utils.DecryptChatID(*user.Company.GroupChatID)
+	if err != nil {
+		return err
+	}
+	BotTokenDecrypt, err := utils.DecryptBotToken(*user.Company.BotToken)
+	if err != nil {
+		return err
+	}
+
+	maleorgirl := ""
+	switch user.Gender {
+	case 1:
+		maleorgirl = "ខ្ញុំបាទ"
+	case 2:
+		maleorgirl = "នាងខ្ញុំ"
+	default:
+		maleorgirl = "ខ្ញុំ"
+	}
+
+	approvegender := ""
+	switch approve.Gender {
+	case 1:
+		approvegender = "លោកគ្រូ"
+	case 2:
+		approvegender = "អ្នកគ្រូ"
+	}
+
+	message := fmt.Sprintf(
+		"<b>សូមជម្រាបសួរលោកគ្រូ អ្នកគ្រូ!</b>\n\n"+
+			"<i>%s</i>"+" "+"<b>%s</b>"+" សុំអនុញ្ញាតច្បាប់ឈប់សម្រាក"+"<b>%v</b>"+"%s"+" ចាប់ពីថ្ងៃទី"+"%s"+" ដល់ថ្ងៃទី"+"%s"+" ចូលបម្រើការងារវិញនៅថ្ងៃទី"+"%s"+"។\n"+
+			"<code>*មូលហេតុ :"+"%s"+"។\n</code>"+
+			"សូមអធ្យាស្រ័យ"+"%s"+" %s"+"ជួយអនុម័តច្បាប់របស់"+"%s"+" ផងសូមអរគុណ 🙏",
+		maleorgirl,
+		user.Name,
+		input.TotalDay,
+		deduction.Name,
+		input.StartDate,
+		input.EndDate,
+		input.BackToWorkDate,
+		input.Reason,
+		approvegender,
+		approve.Name,
+		maleorgirl,
+	)
+
 	newLeaveRequest := model.LeaveRequest{
 		UserID:         id,
 		LeaveTypeID:    input.LeaveTypeID,
@@ -46,7 +117,23 @@ func (s *leaveRequestService) CreateLeaveRequest(ctx context.Context, id int, in
 		ApproveAt:      nil,
 	}
 
-	return s.db.WithContext(ctx).Create(&newLeaveRequest).Error
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if err := tx.Create(&newLeaveRequest).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	go helper.SendTelegramMessage(message, GroupChatIDDecrypt, BotTokenDecrypt)
+
+	return nil
 }
 
 func (s *leaveRequestService) UpdateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestUpdate) error {
