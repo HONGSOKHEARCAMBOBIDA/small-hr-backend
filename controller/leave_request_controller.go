@@ -46,12 +46,17 @@ func (cr *LeaveRequestController) UpdateLeaveRequest(c *gin.Context) {
 		share.ResponseError(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
 	var input request.LeaveRequestUpdate
 	if err := c.ShouldBindJSON(&input); err != nil {
 		share.ResponseError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := cr.service.UpdateLeaveRequest(c, id, input); err != nil {
+	if err := cr.service.UpdateLeaveRequest(c, id, userID, input); err != nil {
 		share.ResponseError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

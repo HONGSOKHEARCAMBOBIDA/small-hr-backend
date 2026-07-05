@@ -19,7 +19,7 @@ import (
 
 type LeaveRequestService interface {
 	CreateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestCreate) error
-	UpdateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestUpdate) error
+	UpdateLeaveRequest(ctx context.Context, id int, userID int, input request.LeaveRequestUpdate) error
 	UpdateStatusLeaveRequest(ctx context.Context, user_id int, id int, input request.LeaveRequestUpdateStatus) error
 	GetLeaveRequest(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.LeaveRequestResponse, *model.PaginationMetadata, error)
 	DeleteLeaveRequest(ctx context.Context, id int) error
@@ -272,7 +272,68 @@ func (s *leaveRequestService) CreateLeaveRequest(ctx context.Context, id int, in
 
 }
 
-func (s *leaveRequestService) UpdateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestUpdate) error {
+func validateLeaveRequestUpdateInput(input request.LeaveRequestUpdate, userID int) error {
+	var start, end, backToWork time.Time
+	var err error
+
+	if input.StartDate != nil {
+		start, err = time.Parse(dataLayout, *input.StartDate)
+		if err != nil {
+			return fmt.Errorf("កាលបរិច្ឆេទចាប់ផ្តើមមិនត្រឹមត្រូវ៖ %w", err)
+		}
+	}
+	if input.EndDate != nil {
+		end, err = time.Parse(dataLayout, *input.EndDate)
+		if err != nil {
+			return fmt.Errorf("កាលបរិច្ឆេទបញ្ចប់មិនត្រឹមត្រូវ៖ %w", err)
+		}
+	}
+	if input.BackToWorkDate != nil {
+		backToWork, err = time.Parse(dataLayout, *input.BackToWorkDate)
+		if err != nil {
+			return fmt.Errorf("កាលបរិច្ឆេទត្រឡប់ទៅធ្វើការវិញមិនត្រឹមត្រូវ៖ %w", err)
+		}
+	}
+
+	if input.StartDate != nil && input.EndDate != nil && end.Before(start) {
+		return errors.New("កាលបរិច្ឆេទបញ្ចប់មិនត្រូវមុនកាលបរិច្ឆេទចាប់ផ្តើមទេ")
+	}
+	if input.EndDate != nil && input.BackToWorkDate != nil && backToWork.Before(end) {
+		return errors.New("កាលបរិច្ឆេទត្រឡប់ទៅធ្វើការវិញមិនត្រូវមុនកាលបរិច្ឆេទបញ្ចប់ទេ")
+	}
+
+	if input.TotalDay != nil && *input.TotalDay <= 0 {
+		return errors.New("ចំនួនថ្ងៃសរុបត្រូវតែធំជាងសូន្យ")
+	}
+
+	if input.Reason != nil {
+		trimmed := strings.TrimSpace(*input.Reason)
+		switch {
+		case trimmed == "":
+			return errors.New("អ្នកត្រូវបញ្ចូលមូលហេតុ")
+		case len(trimmed) < 3:
+			return errors.New("ហេតុផលខ្លីពេក")
+		case len(trimmed) > 500:
+			return errors.New("ហេតុផលវេងពេក")
+		}
+	}
+
+	if *input.ApproveBy == userID {
+		return errors.New("អ្នកខ្លួនឯងមិនអាចអនុម័តច្បាប់ខ្លួនឯងទេ")
+	}
+
+	return nil
+}
+
+func (s *leaveRequestService) UpdateLeaveRequest(ctx context.Context, id int, userID int, input request.LeaveRequestUpdate) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid id: %d", id)
+	}
+
+	if err := validateLeaveRequestUpdateInput(input, userID); err != nil {
+		return fmt.Errorf("invalid leave request: %w", err)
+	}
+
 	updates := map[string]interface{}{}
 
 	if input.LeaveTypeID != nil {
@@ -296,27 +357,78 @@ func (s *leaveRequestService) UpdateLeaveRequest(ctx context.Context, id int, in
 	if input.Reason != nil {
 		updates["reason"] = *input.Reason
 	}
-	if input.ApproveBy != nil {
-		updates["approve_by"] = *input.ApproveBy
-	}
 
 	if len(updates) == 0 {
 		return nil
 	}
 
-	result := s.db.WithContext(ctx).
-		Model(&model.LeaveRequest{}).
-		Where("id = ?", id).
-		Updates(updates)
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&model.LeaveRequest{}).
+			Where("id = ?", id).
+			Updates(updates)
 
-	if result.Error != nil {
-		return result.Error
+		if result.Error != nil {
+			return fmt.Errorf("failed to update leave request %d: %w", id, result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return errors.New("no field to updated")
+		}
+		return nil
+	})
+
+	if err != nil {
+		fmt.Errorf("failed to update leave request", "id", id, "error", err)
+		return err
 	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
+
 	return nil
 }
+
+// func (s *leaveRequestService) UpdateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestUpdate) error {
+// 	updates := map[string]interface{}{}
+
+// 	if input.LeaveTypeID != nil {
+// 		updates["leave_type_id"] = *input.LeaveTypeID
+// 	}
+// 	if input.StartDate != nil {
+// 		updates["start_date"] = *input.StartDate
+// 	}
+// 	if input.EndDate != nil {
+// 		updates["end_date"] = *input.EndDate
+// 	}
+// 	if input.BackToWorkDate != nil {
+// 		updates["back_to_work_date"] = *input.BackToWorkDate
+// 	}
+// 	if input.TotalDay != nil {
+// 		updates["total_day"] = *input.TotalDay
+// 	}
+// 	if input.DeductTypeID != nil {
+// 		updates["deduct_type_id"] = *input.DeductTypeID
+// 	}
+// 	if input.Reason != nil {
+// 		updates["reason"] = *input.Reason
+// 	}
+// 	if input.ApproveBy != nil {
+// 		updates["approve_by"] = *input.ApproveBy
+// 	}
+
+// 	if len(updates) == 0 {
+// 		return nil
+// 	}
+
+// 	result := s.db.WithContext(ctx).
+// 		Model(&model.LeaveRequest{}).
+// 		Where("id = ?", id).
+// 		Updates(updates)
+
+// 	if result.Error != nil {
+// 		return result.Error
+// 	}
+// 	if result.RowsAffected == 0 {
+// 		return gorm.ErrRecordNotFound
+// 	}
+// 	return nil
+// }
 
 func (s *leaveRequestService) UpdateStatusLeaveRequest(ctx context.Context, user_id int, id int, input request.LeaveRequestUpdateStatus) error {
 	var leaveRequest model.LeaveRequest
