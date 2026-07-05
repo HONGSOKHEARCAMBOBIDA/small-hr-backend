@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"mysql/config"
 	"mysql/helper"
 	"mysql/model"
 	"mysql/request"
 	"mysql/response"
 	"mysql/utils"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -33,75 +35,211 @@ func NewLeaveRequestService() LeaveRequestService {
 	}
 }
 
-func (s *leaveRequestService) CreateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestCreate) error {
-	var user model.User
-	if err := s.db.WithContext(ctx).Preload("Company").First(&user, id).Error; err != nil {
-		return err
-	}
+const (
+	GenderMale   = 1
+	GenderFemale = 2
 
-	var approve model.User
-	if err := s.db.WithContext(ctx).First(&approve, input.ApproveBy).Error; err != nil {
-		return err
-	}
+	LeaveStatusPending = 1
 
-	var leavetype model.LeaveType
-	if err := s.db.WithContext(ctx).First(&leavetype, input.LeaveTypeID).Error; err != nil {
-		return err
-	}
+	telegramSendTimeout = 10 * time.Second
+	dataLayout          = "2006-01-02"
+)
 
-	var deduction model.LeaveDeductType
-	if err := s.db.WithContext(ctx).First(&deduction, input.DeductTypeID).Error; err != nil {
-		return err
-	}
-
-	if user.Company.GroupChatID == nil || user.Company.BotToken == nil {
-		return errors.New("company telegram configuration is missing")
-	}
-
-	GroupChatIDDecrypt, err := utils.DecryptChatID(*user.Company.GroupChatID)
+func validateLeaveRequestInput(input request.LeaveRequestCreate) error {
+	start, err := time.Parse(dataLayout, input.StartDate)
 	if err != nil {
-		return err
+		return fmt.Errorf("កាលបរិច្ឆេទចាប់ផ្តើមមិនត្រឹមត្រូវ៖ %w", err)
 	}
-	BotTokenDecrypt, err := utils.DecryptBotToken(*user.Company.BotToken)
+	end, err := time.Parse(dataLayout, input.EndDate)
 	if err != nil {
-		return err
+		return fmt.Errorf("កាលបរិច្ឆេទបញ្ចប់មិនត្រឹមត្រូវ %w", err)
 	}
+	backToWork, err := time.Parse(dataLayout, input.BackToWorkDate)
+	if err != nil {
+		return fmt.Errorf("កាលបរិច្ឆេទត្រឡប់ទៅធ្វើការវិញមិនត្រឹមត្រូវ %w", err)
+	}
+	if end.Before(start) {
+		return errors.New("កាលបរិច្ឆេទបញ្ចប់មិនត្រូវមុនកាលបរិច្ឆេទចាប់ផ្តើមទេ")
+	}
+	if backToWork.Before(end) {
+		return errors.New("កាលបរិច្ឆេទត្រឡប់ទៅធ្វើការវិញមិនត្រូវមុនកាលបរិច្ឆេទបញ្ចប់ទេ")
+	}
+	if input.TotalDay <= 0 {
+		return errors.New("ចំនួនថ្ងៃសរុបត្រូវតែធំជាងសូន្យ")
+	}
+	if input.Reason != nil {
+		trimmed := strings.TrimSpace(*input.Reason)
+		if trimmed == "" {
+			return errors.New("អ្នកត្រូវបញ្ចូលមូលហេតុ")
+		}
+		if len(trimmed) < 3 {
+			return errors.New("ហេតុផលខ្លីពេក")
+		}
+		if len(trimmed) > 500 {
+			return errors.New("ហេតុផលវេងពេក")
+		}
+	}
+	return nil
+}
 
-	maleorgirl := ""
-	switch user.Gender {
-	case 1:
-		maleorgirl = "ខ្ញុំបាទ"
-	case 2:
-		maleorgirl = "នាងខ្ញុំ"
+func hasOverlappingLeaveRequest(tx *gorm.DB, userID int, startDate, endDate string) (bool, error) {
+	var count int64
+	err := tx.Model(&model.LeaveRequest{}).
+		Where("user_id =?", userID).
+		Where("status = ?", LeaveStatusPending).
+		Where("start_date <= ? AND end_date >= ?", endDate, startDate).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func wrapNotFound(err error, entity string, id int) error {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("%s %d not found: %w", entity, id, err)
+	}
+	return fmt.Errorf("failed to load %s:%w", entity, err)
+}
+
+func genderLabel(gender int) string {
+	switch gender {
+	case GenderMale:
+		return "ខ្ញុំបាទ"
+	case GenderFemale:
+		return "នាងខ្ញុំ"
 	default:
-		maleorgirl = "ខ្ញុំ"
+		return "ខ្ញុំ"
 	}
+}
 
-	approvegender := ""
-	switch approve.Gender {
-	case 1:
-		approvegender = "លោកគ្រូ"
-	case 2:
-		approvegender = "អ្នកគ្រូ"
+func approverGenerLable(gender int) string {
+	switch gender {
+	case GenderMale:
+		return "លោកគ្រូ"
+	case GenderFemale:
+		return "អ្នកគ្រូ"
+	default:
+		return "លោកគ្រូ/អ្នកគ្រូ"
 	}
+}
 
-	message := fmt.Sprintf(
+func buildLeaveRequestMessage(user, approve model.User, deduction model.LeaveDeductType, input request.LeaveRequestCreate) string {
+	requester := genderLabel(user.Gender)
+	approveGender := approverGenerLable(approve.Gender)
+
+	return fmt.Sprintf(
 		"<b>សូមជម្រាបសួរលោកគ្រូ អ្នកគ្រូ!</b>\n\n"+
-			"<i>%s</i>"+" "+"<b>%s</b>"+" សុំអនុញ្ញាតច្បាប់ឈប់សម្រាក"+"<b>%v</b>"+"%s"+" ចាប់ពីថ្ងៃទី"+"%s"+" ដល់ថ្ងៃទី"+"%s"+" ចូលបម្រើការងារវិញនៅថ្ងៃទី"+"%s"+"។\n"+
-			"<code>*មូលហេតុ :"+"%s"+"។\n</code>"+
-			"សូមអធ្យាស្រ័យ"+"%s"+" %s"+"ជួយអនុម័តច្បាប់របស់"+"%s"+" ផងសូមអរគុណ 🙏",
-		maleorgirl,
+			"<i>%s</i> <b>%s</b> សុំអនុញ្ញាតច្បាប់ឈប់សម្រាក<b>%v</b>%s ចាប់ពីថ្ងៃទី%s ដល់ថ្ងៃទី%s ចូលបម្រើការងារវិញនៅថ្ងៃទី%s។\n"+
+			"<code>*មូលហេតុ :%s។\n</code>"+
+			"សូមអធ្យាស្រ័យ%s %sជួយអនុម័តច្បាប់របស់%s ផងសូមអរគុណ 🙏",
+		requester,
 		user.Name,
 		input.TotalDay,
 		deduction.Name,
 		input.StartDate,
 		input.EndDate,
 		input.BackToWorkDate,
-		input.Reason,
-		approvegender,
+		*input.Reason,
+		approveGender,
 		approve.Name,
-		maleorgirl,
+		requester,
 	)
+}
+
+func notifyApprover(message, groupChatID, botToken string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered panic while sending telegram message: %v", r)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), telegramSendTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- helper.SendTelegramMessage(message, groupChatID, botToken)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			log.Printf("failed to send telegram leave notification: %v", err)
+		}
+	case <-ctx.Done():
+		log.Printf("timed out sending telegram leave notification after %s", telegramSendTimeout)
+	}
+}
+
+func (s *leaveRequestService) CreateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestCreate) error {
+	if err := validateLeaveRequestInput(input); err != nil {
+		return fmt.Errorf("invalid leave request: %w", err)
+	}
+
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return fmt.Errorf("faile to start transaction: %w", tx.Error)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+
+		}
+	}()
+
+	var user model.User
+	if err := tx.Preload("Company").First(&user, id).Error; err != nil {
+		tx.Rollback()
+		return wrapNotFound(err, "user", id)
+	}
+
+	var approver model.User
+	if err := tx.First(&approver, input.ApproveBy).Error; err != nil {
+		tx.Rollback()
+		return wrapNotFound(err, "approver", input.ApproveBy)
+	}
+
+	var leaveType model.LeaveType
+	if err := tx.First(&leaveType, input.LeaveTypeID).Error; err != nil {
+		tx.Rollback()
+		return wrapNotFound(err, "leaveType", input.LeaveTypeID)
+	}
+
+	var deduction model.LeaveDeductType
+	if err := tx.First(&deduction, input.DeductTypeID).Error; err != nil {
+		tx.Rollback()
+		return wrapNotFound(err, "LeaveDeductType", input.DeductTypeID)
+	}
+
+	if user.Company.GroupChatID == nil || user.Company.BotToken == nil {
+		tx.Rollback()
+		return errors.New("company telegram configuration is missing")
+	}
+
+	groupChatID, err := utils.DecryptChatID(*user.Company.GroupChatID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to decrypt groupoo chat id: %w", err)
+	}
+
+	boToken, err := utils.DecryptBotToken(*user.Company.BotToken)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to decrypt bot token: %w", err)
+	}
+
+	overlaps, err := hasOverlappingLeaveRequest(tx, id, input.StartDate, input.EndDate)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to check overlapping leave request: %w", err)
+	}
+
+	if overlaps {
+		tx.Rollback()
+		return errors.New("មានច្បាប់របស់អ្នកមិនទាន់អនុម័តនៅឡេីយទេ")
+	}
 
 	newLeaveRequest := model.LeaveRequest{
 		UserID:         id,
@@ -111,30 +249,27 @@ func (s *leaveRequestService) CreateLeaveRequest(ctx context.Context, id int, in
 		BackToWorkDate: input.BackToWorkDate,
 		TotalDay:       input.TotalDay,
 		DeductTypeID:   input.DeductTypeID,
-		Reason:         input.Reason,
-		Status:         1,
+		Reason:         *input.Reason,
+		Status:         LeaveStatusPending,
 		ApproveBy:      input.ApproveBy,
 		PayrollID:      nil,
 		ApproveAt:      nil,
 	}
 
-	tx := s.db.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return tx.Error
-	}
-
 	if err := tx.Create(&newLeaveRequest).Error; err != nil {
 		tx.Rollback()
-		return err
+		return fmt.Errorf("faile to created leave request: %w", err)
 	}
 
 	if err := tx.Commit().Error; err != nil {
-		return err
+		return fmt.Errorf("failed to commit leave request: %w", err)
 	}
 
-	go helper.SendTelegramMessage(message, GroupChatIDDecrypt, BotTokenDecrypt)
+	message := buildLeaveRequestMessage(user, approver, deduction, input)
+	go notifyApprover(message, groupChatID, boToken)
 
 	return nil
+
 }
 
 func (s *leaveRequestService) UpdateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestUpdate) error {

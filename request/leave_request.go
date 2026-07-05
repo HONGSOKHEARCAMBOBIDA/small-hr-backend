@@ -7,7 +7,7 @@ type LeaveRequestCreate struct {
 	BackToWorkDate string  `json:"back_to_work_date" gorm:"column:back_to_work_date"`
 	TotalDay       float64 `json:"total_day" gorm:"column:total_day"`
 	DeductTypeID   int     `json:"deduct_type_id" gorm:"column:deduct_type_id"`
-	Reason         string  `json:"reason" gorm:"column:reason"`
+	Reason         *string `json:"reason" gorm:"column:reason"`
 	ApproveBy      int     `json:"approve_by" gorm:"column:approve_by"`
 }
 
