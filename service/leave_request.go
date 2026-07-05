@@ -20,6 +20,7 @@ type LeaveRequestService interface {
 	UpdateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestUpdate) error
 	UpdateStatusLeaveRequest(ctx context.Context, user_id int, id int, input request.LeaveRequestUpdateStatus) error
 	GetLeaveRequest(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.LeaveRequestResponse, *model.PaginationMetadata, error)
+	DeleteLeaveRequest(ctx context.Context, id int) error
 }
 
 type leaveRequestService struct {
@@ -325,4 +326,22 @@ func (s *leaveRequestService) GetLeaveRequest(ctx context.Context, id int, pf re
 	}
 
 	return data, helper.BuildPaginationMeta(pf, totalCount), nil
+}
+
+func (s *leaveRequestService) DeleteLeaveRequest(ctx context.Context, id int) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.
+			Where("id = ? AND payroll_id IS NULL", id).
+			Delete(&model.LeaveRequest{})
+
+		if result.Error != nil {
+			return fmt.Errorf("failed to delete leave request: %w", result.Error)
+		}
+
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("leave request not found or has already been processed in payroll")
+		}
+
+		return nil
+	})
 }

@@ -118,3 +118,17 @@ func (cr *LeaveRequestController) GetLeaveRequest(c *gin.Context) {
 		"pagination": metadata,
 	})
 }
+
+func (cr *LeaveRequestController) DeleteLeaveRequest(c *gin.Context) {
+	idparam := c.Param("id")
+	id, err := strconv.Atoi(idparam)
+	if err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := cr.service.DeleteLeaveRequest(c, id); err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.ResponseSuccess(c, http.StatusOK, "Delted")
+}
