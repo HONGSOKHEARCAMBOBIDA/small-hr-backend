@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type LeaveRequestService interface {
@@ -43,6 +44,17 @@ const (
 
 	telegramSendTimeout = 10 * time.Second
 	dataLayout          = "2006-01-02"
+
+	ManageOneCompany      = 1
+	ManageMultipleCompany = 2
+	ManageAllCompany      = 3
+
+	RoleLevelStaft     = 1
+	RoleLevelManager   = 2
+	RoleLevelDeveloper = 7
+
+	defaultPageSize = 10
+	maxPageSize     = 20
 )
 
 func validateLeaveRequestInput(input request.LeaveRequestCreate) error {
@@ -384,101 +396,71 @@ func (s *leaveRequestService) UpdateLeaveRequest(ctx context.Context, id int, us
 	return nil
 }
 
-// func (s *leaveRequestService) UpdateLeaveRequest(ctx context.Context, id int, input request.LeaveRequestUpdate) error {
-// 	updates := map[string]interface{}{}
-
-// 	if input.LeaveTypeID != nil {
-// 		updates["leave_type_id"] = *input.LeaveTypeID
-// 	}
-// 	if input.StartDate != nil {
-// 		updates["start_date"] = *input.StartDate
-// 	}
-// 	if input.EndDate != nil {
-// 		updates["end_date"] = *input.EndDate
-// 	}
-// 	if input.BackToWorkDate != nil {
-// 		updates["back_to_work_date"] = *input.BackToWorkDate
-// 	}
-// 	if input.TotalDay != nil {
-// 		updates["total_day"] = *input.TotalDay
-// 	}
-// 	if input.DeductTypeID != nil {
-// 		updates["deduct_type_id"] = *input.DeductTypeID
-// 	}
-// 	if input.Reason != nil {
-// 		updates["reason"] = *input.Reason
-// 	}
-// 	if input.ApproveBy != nil {
-// 		updates["approve_by"] = *input.ApproveBy
-// 	}
-
-// 	if len(updates) == 0 {
-// 		return nil
-// 	}
-
-// 	result := s.db.WithContext(ctx).
-// 		Model(&model.LeaveRequest{}).
-// 		Where("id = ?", id).
-// 		Updates(updates)
-
-// 	if result.Error != nil {
-// 		return result.Error
-// 	}
-// 	if result.RowsAffected == 0 {
-// 		return gorm.ErrRecordNotFound
-// 	}
-// 	return nil
-// }
-
 func (s *leaveRequestService) UpdateStatusLeaveRequest(ctx context.Context, user_id int, id int, input request.LeaveRequestUpdateStatus) error {
+	if input.Status == nil {
+		return errors.New("status is required")
+	}
+
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return fmt.Errorf("faile to start transaction: %w", tx.Error)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+
+		}
+	}()
+
 	var leaveRequest model.LeaveRequest
-	if err := s.db.First(&leaveRequest, id).Error; err != nil {
+
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&leaveRequest, id).Error; err != nil {
 		return err
 	}
 
 	if leaveRequest.UserID == user_id {
-		return errors.New("អ្នកមិនអាចអនុម័តច្បាប់របស់ខ្លួនឯងបានទេ") // can't approve your own leave request
+		return errors.New("អ្នកមិនអាចអនុម័តច្បាប់របស់ខ្លួនឯងបានទេ")
 	}
 
-	updates := map[string]interface{}{}
-	if input.Status != nil {
-		updates["status"] = *input.Status
-		updates["approved_at"] = time.Now().Format("2006-01-02 15:04:05")
-	}
-	if len(updates) == 0 {
-		return nil
+	updates := map[string]interface{}{
+		"status":      *input.Status,
+		"approved_at": time.Now(),
 	}
 
-	result := s.db.WithContext(ctx).
-		Model(&model.LeaveRequest{}).
-		Where("id = ?", id).
-		Updates(updates)
-
+	result := tx.Model(&model.LeaveRequest{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
-		return result.Error
+		return fmt.Errorf("faild to update: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("មិនអាចធ្វើបច្ចុប្បន្នភាពស្ថានភាពបានទេ") // could not update status
+		return errors.New("មិនអាចធ្វើបច្ចុប្បន្នភាពស្ថានភាពបានទេ")
 	}
-	return nil
+
+	return tx.Commit().Error
+
 }
 
 func applyAccessFilterLeaveRequest(query *gorm.DB, db *gorm.DB, role model.Role, user model.User) *gorm.DB {
-	if role.Level > 1 && role.Level < 7 {
+	if role.Level > RoleLevelStaft && role.Level <= RoleLevelManager {
 		switch user.ManageCompany {
-		case 1:
+		case ManageOneCompany:
 			return query.Where("u.company_id =?", user.CompanyID)
-		case 2:
+		case ManageMultipleCompany:
 			var companyIDs []int
 			db.Model(&model.UserCompany{}).Where("user_id =?", user.ID).Pluck("company_id", &companyIDs)
 			if len(companyIDs) == 0 {
 				return query.Where("1 = 0")
 			}
 			return query.Where("u.company_id IN ?", companyIDs)
+		case ManageAllCompany:
+			return query
+		default:
+			return query.Where("1 = 0")
 		}
-		return query
-	} else if role.Level <= 1 {
+	} else if role.Level <= RoleLevelStaft {
 		return query.Where("u.id =?", user.ID)
+	} else if role.Level > RoleLevelManager {
+		return query
 	}
 
 	return query
@@ -486,18 +468,19 @@ func applyAccessFilterLeaveRequest(query *gorm.DB, db *gorm.DB, role model.Role,
 
 func applyCommonFilterLeaveRequest(query *gorm.DB, filter map[string]string) *gorm.DB {
 	for key, value := range filter {
+		value = strings.TrimSpace(value)
 		if value == "" {
 			continue
 		}
 		switch key {
 		case "name":
-			query = query.Where("u.name LIKE ?", "%"+value+"%")
+			query = query.Where("u.name LIKE ?", "%"+helper.EscapeLike(value)+"%")
 		case "company_id":
-			query = query.Where("u.company_id = ?", value)
+			query = query.Where("u.company_id =?", value)
 		case "role_id":
-			query = query.Where("u.role_id = ?", value)
+			query = query.Where("u.role_id =?", value)
 		case "status":
-			query = query.Where("l.status = ?", value)
+			query = query.Where("l.status =?", value)
 		}
 	}
 	return query
@@ -514,7 +497,9 @@ func (s *leaveRequestService) GetLeaveRequest(ctx context.Context, id int, pf re
 		pf.Page = 1
 	}
 	if pf.PageSize < 1 {
-		pf.PageSize = 10
+		pf.PageSize = defaultPageSize
+	} else if pf.PageSize > maxPageSize {
+		pf.PageSize = maxPageSize
 	}
 	offset := (pf.Page - 1) * pf.PageSize
 
