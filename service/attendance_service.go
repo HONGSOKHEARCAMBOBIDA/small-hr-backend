@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"mysql/config"
 	"mysql/helper"
 	"mysql/model"
@@ -55,260 +56,17 @@ var recordTypeLabel = map[int]string{
 	RecordEveningCheckOut: "ចេញពីធ្វេីការវែនទី២",
 }
 
+var checkTypeLabel = map[int]string{
+	RecordMorningCheckIn:  "ចូលធ្វេីការវែនទី១",
+	RecordMorningCheckOut: "ចេញពីធ្វើការវែនទី១",
+	RecordEveningCheckIn:  "ចូលធ្វេីការវែនទី២",
+	RecordEveningCheckOut: "ចេញពីធ្វេីការវែនទី២",
+}
+
 type sessionConfig struct {
 	scheduledTime string
 	isCheckIn     bool
 	recordType    int
-}
-
-func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input request.AttendanceRequestCreate) error {
-	tx := s.db.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return tx.Error
-	}
-
-	committed := false
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		} else if !committed {
-			tx.Rollback()
-		}
-	}()
-
-	now := time.Now()
-	currentDate := now.Format("2006-01-02")
-	currentTime := now.Format("15:04:05")
-	dayofweek := helper.GetCurrentDay()
-
-	var user model.User
-	if err := s.db.WithContext(ctx).Preload("Company").First(&user, id).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	var shift model.Shift
-	if err := tx.Where("user_id = ? AND day = ?", user.ID, dayofweek).First(&shift).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-	if shift.IsDayoff {
-		tx.Rollback()
-		return errors.New("today is dayoff")
-	}
-
-	companyLat, err := strconv.ParseFloat(user.Company.Latitude, 64)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	companyLng, err := strconv.ParseFloat(user.Company.Longitude, 64)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	userLat, err := strconv.ParseFloat(input.Latitude, 64)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	userLng, err := strconv.ParseFloat(input.Longitude, 64)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	radius, err := strconv.ParseFloat(user.Company.Radius, 64)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	distance := utils.CalculateDistance(companyLat, companyLng, userLat, userLng)
-	inZone := distance <= radius
-
-	if !inZone && user.Company.CanScanOutsize == 0 {
-		tx.Rollback()
-		return errors.New("អ្នកមិនអាចស្កែនក្រៅតំបន់ក្រុមហ៊ុនបានទេ")
-	}
-
-	var attendance model.Attendance
-	err = tx.Where("user_id = ? AND check_date = ?", user.ID, currentDate).First(&attendance).Error
-	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			tx.Rollback()
-			return err
-		}
-
-		attendance = model.Attendance{
-			UserID:    user.ID,
-			CheckDate: currentDate,
-			Status:    "WORKING",
-		}
-		if err := tx.Create(&attendance).Error; err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
-
-	var existingRecords []model.AttendanceRecord
-	if err := tx.Where("attendance_id = ?", attendance.ID).
-		Order("id ASC").
-		Find(&existingRecords).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	recordCount := len(existingRecords)
-
-	// Build session list based on ShiftType
-	// ShiftType 1 = Full day    → CheckIn1, CheckOut1, CheckIn2, CheckOut2
-	// ShiftType 2 = Morning only → CheckIn1, CheckOut1
-	// ShiftType 3 = Evening only → CheckIn2, CheckOut2
-
-	type sessionConfig struct {
-		scheduledTime string
-		isCheckIn     bool
-		recordType    int // 1=CheckIn1, 2=CheckOut1, 3=CheckIn2, 4=CheckOut2
-	}
-
-	var sessions []sessionConfig
-
-	switch shift.ShiftType {
-
-	case 2:
-		if shift.CheckIn1 == nil || shift.CheckOut1 == nil {
-			return errors.New("ធ្វេីការវែនព្រឹកតែមិនទាន់ដាក់ម៉ោងចេញចូល")
-		}
-		sessions = []sessionConfig{
-			{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: 1},
-			{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: 2},
-		}
-	case 3:
-		if shift.CheckIn2 == nil || shift.CheckOut2 == nil {
-			return errors.New("ធ្វេីការវែនល្ងាចតែមិនទាន់ដាក់ម៉ោងចេញចូល")
-		}
-		sessions = []sessionConfig{
-			{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: 3},
-			{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: 4},
-		}
-	default:
-		if shift.CheckIn1 == nil || shift.CheckOut1 == nil || shift.CheckIn2 == nil || shift.CheckOut2 == nil {
-			return errors.New("គ្មានម៉ោងធ្វេីការ")
-		}
-		sessions = []sessionConfig{
-			{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: 1},
-			{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: 2},
-			{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: 3},
-			{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: 4},
-		}
-	}
-
-	maxRecords := len(sessions)
-
-	if recordCount >= maxRecords {
-		if err := tx.Model(&model.Attendance{}).
-			Where("id = ?", attendance.ID).
-			Update("status", "COMPLETE").Error; err != nil {
-			return fmt.Errorf("failed to update attendance status: %w", err)
-		}
-		if err := tx.Commit().Error; err != nil {
-			return err
-		}
-		committed = true
-		return errors.New("all check-ins and check-outs completed for today")
-	}
-
-	current := sessions[recordCount]
-
-	attendanceType := helper.DetermineAttendanceType(currentTime, current.scheduledTime, current.isCheckIn)
-
-	record := model.AttendanceRecord{
-		AttendanceID:   attendance.ID,
-		ShiftID:        shift.ID,
-		AttendanceType: attendanceType,
-		Reason:         input.Reason,
-		CheckTime:      currentTime,
-		Type:           current.recordType,
-		Inzone:         inZone,
-		Latitude:       input.Latitude,
-		Longitude:      input.Longitude,
-	}
-	if err := tx.Create(&record).Error; err != nil {
-		return err
-	}
-
-	if recordCount+1 >= maxRecords {
-		if err := tx.Model(&model.Attendance{}).
-			Where("id = ?", attendance.ID).
-			Update("status", "COMPLETE").Error; err != nil {
-			return fmt.Errorf("failed to update attendance status: %w", err)
-		}
-	}
-
-	workTime := fmt.Sprintf("%s", current.scheduledTime)
-	lateText := ""
-
-	switch attendanceType {
-	case 1:
-		lateText = "🟢 ចូលធ្វើការមុនម៉ោង"
-	case 2:
-		lateText = "🤭 ចូលធ្វើការទាន់ម៉ោង"
-	case 3:
-		lateText = "🔴 ចូលធ្វើការយឺត"
-	case 4:
-		lateText = "🤫 ចេញពីធ្វើការមុនម៉ោង"
-	case 5:
-		lateText = "😴 ចេញពីធ្វើការត្រឹមម៉ោង"
-	case 6:
-		lateText = "😓 ចេញពីធ្វើការក្រោយម៉ោង"
-	}
-
-	zoneText := "📍 ស្កែនក្នុងតំបន់ក្រុមហ៊ុន"
-	if !inZone {
-		zoneText = "⚠️ ស្កែនក្រៅតំបន់ក្រុមហ៊ុន"
-	}
-
-	checktype := ""
-	switch current.recordType {
-	case 1:
-		checktype = "ចូលធ្វេីការវែនទី១"
-	case 2:
-		checktype = "ចេញពីធ្វើការវែនទី១"
-	case 3:
-		checktype = "ចូលធ្វេីការវែនទី២"
-	case 4:
-		checktype = "ចេញពីធ្វេីការវែនទី២"
-	default:
-		return fmt.Errorf("unknown record type: %d", current.recordType)
-	}
-	GroupChatIDDecrypt, err := utils.DecryptChatID(*user.Company.GroupChatID)
-	BotTokenDecrypt, err := utils.DecryptBotToken(*user.Company.BotToken)
-	message := fmt.Sprintf(
-		"<b>%s</b>\n\n"+
-			"👤 ឈ្មោះ: %s\n"+
-			"🏢 សាខា: %s\n"+
-			"🕒 ម៉ោងត្រូវស្កែន: %s\n"+
-			"🕒 ម៉ោងបានស្កែន: %s\n"+
-			"%s\n"+
-			"%s\n"+
-			"មូលហេតុ: %s\n",
-		checktype,
-		user.Name,
-		user.Company.Name,
-		workTime,
-		now.Format("15:04:05"),
-		lateText,
-		zoneText,
-		input.Reason,
-	)
-	go helper.SendTelegramMessage(message, GroupChatIDDecrypt, BotTokenDecrypt)
-
-	if err := tx.Commit().Error; err != nil {
-		return err
-	}
-	committed = true
-	return nil
-
 }
 
 func buildSession(shift model.Shift) ([]sessionConfig, error) {
@@ -344,6 +102,470 @@ func buildSession(shift model.Shift) ([]sessionConfig, error) {
 	}
 }
 
+func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input request.AttendanceRequestCreate) error {
+	now := time.Now()
+	currentDate := now.Format("2006-01-02")
+	currentTime := now.Format("15:04:05")
+	dayofweek := helper.GetCurrentDay()
+
+	var user model.User
+	if err := s.db.WithContext(ctx).Preload("Company").First(&user, id).Error; err != nil {
+		return fmt.Errorf("failed to load user: %w", err)
+	}
+
+	var shift model.Shift
+	if err := s.db.WithContext(ctx).Where("user_id = ? AND day = ?", user.ID, dayofweek).First(&shift).Error; err != nil {
+		return fmt.Errorf("failed to load shift: %w", err)
+	}
+	if shift.IsDayoff {
+		return errors.New("today is dayoff")
+	}
+
+	sessions, err := buildSession(shift)
+	if err != nil {
+		return err
+	}
+
+	companyLat, err := strconv.ParseFloat(user.Company.Latitude, 64)
+	if err != nil {
+		return fmt.Errorf("invalid company latitude: %w", err)
+	}
+	companyLng, err := strconv.ParseFloat(user.Company.Longitude, 64)
+	if err != nil {
+		return fmt.Errorf("invalid company longitude: %w", err)
+	}
+	userLat, err := strconv.ParseFloat(input.Latitude, 64)
+	if err != nil {
+		return fmt.Errorf("invalid user latitude: %w", err)
+	}
+	userLng, err := strconv.ParseFloat(input.Longitude, 64)
+	if err != nil {
+		return fmt.Errorf("invalid user longitude :%w", err)
+	}
+	radius, err := strconv.ParseFloat(user.Company.Radius, 64)
+	if err != nil {
+		return fmt.Errorf("invalid company redius: %w", err)
+	}
+	distance := utils.CalculateDistance(companyLat, companyLng, userLat, userLng)
+	inzone := distance <= radius
+
+	if !inzone && user.Company.CanScanOutsize == 0 {
+		return errors.New("អ្នកមិនអាចស្កែនក្រៅតំបន់ក្រុមហ៊ុនបានទេ")
+	}
+
+	var current sessionConfig
+	var record model.AttendanceRecord
+	var attendanceID uint
+	var justCompleted bool
+
+	txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var attendance model.Attendance
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ? AND check_date = ?", user.ID, currentDate).First(&attendance).Error
+		switch {
+		case err == nil:
+
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			attendance = model.Attendance{
+				UserID:    user.ID,
+				CheckDate: currentDate,
+				Status:    "WORKING",
+			}
+			if err := tx.Create(&attendance).Error; err != nil {
+				return fmt.Errorf("failed to create attendance: %w", err)
+			}
+		default:
+			return fmt.Errorf("failed to load attendance: %w", err)
+		}
+		var existingRecords []model.AttendanceRecord
+		if err := tx.Where("attendance_id = ?", attendance.ID).Order("id ASC").Find(&existingRecords).Error; err != nil {
+			return fmt.Errorf("failed to load attendance :%w", err)
+		}
+		recordCount := len(existingRecords)
+		maxRecords := len(sessions)
+
+		if recordCount >= maxRecords {
+			if err := tx.Model(&model.Attendance{}).Where("id = ?", attendance.ID).
+				Update("status", "COMPLETE").Error; err != nil {
+				return fmt.Errorf("failed to update attendance status:%w", err)
+			}
+			return errors.New("all check-in and check-out completed for today")
+		}
+		current = sessions[recordCount]
+		attendanceType := helper.DetermineAttendanceType(currentTime, current.scheduledTime, current.isCheckIn)
+		record = model.AttendanceRecord{
+			AttendanceID:   attendance.ID,
+			ShiftID:        shift.ID,
+			AttendanceType: attendanceType,
+			Reason:         input.Reason,
+			CheckTime:      currentTime,
+			Type:           current.recordType,
+			Inzone:         inzone,
+			Latitude:       input.Latitude,
+			Longitude:      input.Longitude,
+		}
+		if err := tx.Create(&record).Error; err != nil {
+			return fmt.Errorf("failed to created attendance record: %w", err)
+		}
+		attendanceID = uint(attendance.ID)
+		if recordCount+1 >= maxRecords {
+			if err := tx.Model(&model.Attendance{}).Where("id = ?", attendance.ID).
+				Update("status", "COMPLETE").Error; err != nil {
+				return fmt.Errorf("faild to update attendance status %w", err)
+			}
+			justCompleted = true
+		}
+		return nil
+	})
+	if txErr != nil {
+		return txErr
+	}
+	s.notifyTelegram(user, shift, current, record, currentTime, inzone, input.Reason)
+
+	_ = attendanceID
+	_ = justCompleted
+	return nil
+}
+
+func (s *attendanceservice) notifyTelegram(
+	user model.User,
+	shift model.Shift,
+	current sessionConfig,
+	record model.AttendanceRecord,
+	currentTime string,
+	inZone bool,
+	reason string,
+) {
+	if user.Company.GroupChatID == nil || user.Company.BotToken == nil {
+		return
+	}
+
+	groupChatID, err := utils.DecryptChatID(*user.Company.GroupChatID)
+	if err != nil {
+		fmt.Errorf("failed to decrypt group chat id %w", err)
+		return
+	}
+	botToken, err := utils.DecryptBotToken(*user.Company.BotToken)
+	if err != nil {
+		fmt.Errorf("failed to decrypt bot token %w", err)
+	}
+
+	checktype, ok := checkTypeLabel[current.recordType]
+	if !ok {
+		fmt.Errorf("unknown record type for notification %w", err)
+		return
+	}
+
+	lateText := attendanceTypeLabel(record.AttendanceType)
+
+	zoneText := "📍 ស្កែនក្នុងតំបន់ក្រុមហ៊ុន"
+	if !inZone {
+		zoneText = "⚠️ ស្កែនក្រៅតំបន់ក្រុមហ៊ុន"
+	}
+
+	// Escape user-controlled text before embedding into an HTML-formatted message.
+	safeReason := html.EscapeString(reason)
+	safeName := html.EscapeString(user.Name)
+	safeCompany := html.EscapeString(user.Company.Name)
+
+	message := fmt.Sprintf(
+		"<b>%s</b>\n\n"+
+			"👤 ឈ្មោះ: %s\n"+
+			"🏢 សាខា: %s\n"+
+			"🕒 ត្រូវស្កែន: %s\n"+
+			"🕒 បានស្កែន: %s\n"+
+			"%s\n"+
+			"%s\n"+
+			"មូលហេតុ: %s\n",
+		checktype,
+		safeName,
+		safeCompany,
+		current.scheduledTime,
+		currentTime,
+		lateText,
+		zoneText,
+		safeReason,
+	)
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Errorf("panic while sending telegram message")
+			}
+		}()
+		helper.SendTelegramMessage(message, groupChatID, botToken)
+	}()
+}
+
+func attendanceTypeLabel(attendanceType int) string {
+	switch attendanceType {
+	case 1:
+		return "🟢 ចូលធ្វើការមុនម៉ោង"
+	case 2:
+		return "🤭 ចូលធ្វើការទាន់ម៉ោង"
+	case 3:
+		return "🔴 ចូលធ្វើការយឺត"
+	case 4:
+		return "🤫 ចេញពីធ្វើការមុនម៉ោង"
+	case 5:
+		return "😴 ចេញពីធ្វើការត្រឹមម៉ោង"
+	case 6:
+		return "😓 ចេញពីធ្វើការក្រោយម៉ោង"
+	default:
+		return ""
+	}
+}
+
+// func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input request.AttendanceRequestCreate) error {
+// 	tx := s.db.WithContext(ctx).Begin()
+// 	if tx.Error != nil {
+// 		return tx.Error
+// 	}
+
+// 	committed := false
+// 	defer func() {
+// 		if r := recover(); r != nil {
+// 			tx.Rollback()
+// 		} else if !committed {
+// 			tx.Rollback()
+// 		}
+// 	}()
+
+// 	now := time.Now()
+// 	currentDate := now.Format("2006-01-02")
+// 	currentTime := now.Format("15:04:05")
+// 	dayofweek := helper.GetCurrentDay()
+
+// 	var user model.User
+// 	if err := s.db.WithContext(ctx).Preload("Company").First(&user, id).Error; err != nil {
+// 		tx.Rollback()
+// 		return err
+// 	}
+
+// 	var shift model.Shift
+// 	if err := tx.Where("user_id = ? AND day = ?", user.ID, dayofweek).First(&shift).Error; err != nil {
+// 		tx.Rollback()
+// 		return err
+// 	}
+// 	if shift.IsDayoff {
+// 		tx.Rollback()
+// 		return errors.New("today is dayoff")
+// 	}
+
+// 	companyLat, err := strconv.ParseFloat(user.Company.Latitude, 64)
+// 	if err != nil {
+// 		tx.Rollback()
+// 		return err
+// 	}
+// 	companyLng, err := strconv.ParseFloat(user.Company.Longitude, 64)
+// 	if err != nil {
+// 		tx.Rollback()
+// 		return err
+// 	}
+// 	userLat, err := strconv.ParseFloat(input.Latitude, 64)
+// 	if err != nil {
+// 		tx.Rollback()
+// 		return err
+// 	}
+// 	userLng, err := strconv.ParseFloat(input.Longitude, 64)
+// 	if err != nil {
+// 		tx.Rollback()
+// 		return err
+// 	}
+// 	radius, err := strconv.ParseFloat(user.Company.Radius, 64)
+// 	if err != nil {
+// 		tx.Rollback()
+// 		return err
+// 	}
+
+// 	distance := utils.CalculateDistance(companyLat, companyLng, userLat, userLng)
+// 	inZone := distance <= radius
+
+// 	if !inZone && user.Company.CanScanOutsize == 0 {
+// 		tx.Rollback()
+// 		return errors.New("អ្នកមិនអាចស្កែនក្រៅតំបន់ក្រុមហ៊ុនបានទេ")
+// 	}
+
+// 	var attendance model.Attendance
+// 	err = tx.Where("user_id = ? AND check_date = ?", user.ID, currentDate).First(&attendance).Error
+// 	if err != nil {
+// 		if !errors.Is(err, gorm.ErrRecordNotFound) {
+// 			tx.Rollback()
+// 			return err
+// 		}
+
+// 		attendance = model.Attendance{
+// 			UserID:    user.ID,
+// 			CheckDate: currentDate,
+// 			Status:    "WORKING",
+// 		}
+// 		if err := tx.Create(&attendance).Error; err != nil {
+// 			tx.Rollback()
+// 			return err
+// 		}
+// 	}
+
+// 	var existingRecords []model.AttendanceRecord
+// 	if err := tx.Where("attendance_id = ?", attendance.ID).
+// 		Order("id ASC").
+// 		Find(&existingRecords).Error; err != nil {
+// 		tx.Rollback()
+// 		return err
+// 	}
+
+// 	recordCount := len(existingRecords)
+
+// 	// Build session list based on ShiftType
+// 	// ShiftType 1 = Full day    → CheckIn1, CheckOut1, CheckIn2, CheckOut2
+// 	// ShiftType 2 = Morning only → CheckIn1, CheckOut1
+// 	// ShiftType 3 = Evening only → CheckIn2, CheckOut2
+
+// 	type sessionConfig struct {
+// 		scheduledTime string
+// 		isCheckIn     bool
+// 		recordType    int // 1=CheckIn1, 2=CheckOut1, 3=CheckIn2, 4=CheckOut2
+// 	}
+
+// 	var sessions []sessionConfig
+
+// 	switch shift.ShiftType {
+
+// 	case 2:
+// 		if shift.CheckIn1 == nil || shift.CheckOut1 == nil {
+// 			return errors.New("ធ្វេីការវែនព្រឹកតែមិនទាន់ដាក់ម៉ោងចេញចូល")
+// 		}
+// 		sessions = []sessionConfig{
+// 			{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: 1},
+// 			{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: 2},
+// 		}
+// 	case 3:
+// 		if shift.CheckIn2 == nil || shift.CheckOut2 == nil {
+// 			return errors.New("ធ្វេីការវែនល្ងាចតែមិនទាន់ដាក់ម៉ោងចេញចូល")
+// 		}
+// 		sessions = []sessionConfig{
+// 			{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: 3},
+// 			{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: 4},
+// 		}
+// 	default:
+// 		if shift.CheckIn1 == nil || shift.CheckOut1 == nil || shift.CheckIn2 == nil || shift.CheckOut2 == nil {
+// 			return errors.New("គ្មានម៉ោងធ្វេីការ")
+// 		}
+// 		sessions = []sessionConfig{
+// 			{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: 1},
+// 			{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: 2},
+// 			{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: 3},
+// 			{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: 4},
+// 		}
+// 	}
+
+// 	maxRecords := len(sessions)
+
+// 	if recordCount >= maxRecords {
+// 		if err := tx.Model(&model.Attendance{}).
+// 			Where("id = ?", attendance.ID).
+// 			Update("status", "COMPLETE").Error; err != nil {
+// 			return fmt.Errorf("failed to update attendance status: %w", err)
+// 		}
+// 		if err := tx.Commit().Error; err != nil {
+// 			return err
+// 		}
+// 		committed = true
+// 		return errors.New("all check-ins and check-outs completed for today")
+// 	}
+
+// 	current := sessions[recordCount]
+
+// 	attendanceType := helper.DetermineAttendanceType(currentTime, current.scheduledTime, current.isCheckIn)
+
+// 	record := model.AttendanceRecord{
+// 		AttendanceID:   attendance.ID,
+// 		ShiftID:        shift.ID,
+// 		AttendanceType: attendanceType,
+// 		Reason:         input.Reason,
+// 		CheckTime:      currentTime,
+// 		Type:           current.recordType,
+// 		Inzone:         inZone,
+// 		Latitude:       input.Latitude,
+// 		Longitude:      input.Longitude,
+// 	}
+// 	if err := tx.Create(&record).Error; err != nil {
+// 		return err
+// 	}
+
+// 	if recordCount+1 >= maxRecords {
+// 		if err := tx.Model(&model.Attendance{}).
+// 			Where("id = ?", attendance.ID).
+// 			Update("status", "COMPLETE").Error; err != nil {
+// 			return fmt.Errorf("failed to update attendance status: %w", err)
+// 		}
+// 	}
+
+// 	workTime := fmt.Sprintf("%s", current.scheduledTime)
+// 	lateText := ""
+
+// 	switch attendanceType {
+// 	case 1:
+// 		lateText = "🟢 ចូលធ្វើការមុនម៉ោង"
+// 	case 2:
+// 		lateText = "🤭 ចូលធ្វើការទាន់ម៉ោង"
+// 	case 3:
+// 		lateText = "🔴 ចូលធ្វើការយឺត"
+// 	case 4:
+// 		lateText = "🤫 ចេញពីធ្វើការមុនម៉ោង"
+// 	case 5:
+// 		lateText = "😴 ចេញពីធ្វើការត្រឹមម៉ោង"
+// 	case 6:
+// 		lateText = "😓 ចេញពីធ្វើការក្រោយម៉ោង"
+// 	}
+
+// 	zoneText := "📍 ស្កែនក្នុងតំបន់ក្រុមហ៊ុន"
+// 	if !inZone {
+// 		zoneText = "⚠️ ស្កែនក្រៅតំបន់ក្រុមហ៊ុន"
+// 	}
+
+// 	checktype := ""
+// 	switch current.recordType {
+// 	case 1:
+// 		checktype = "ចូលធ្វេីការវែនទី១"
+// 	case 2:
+// 		checktype = "ចេញពីធ្វើការវែនទី១"
+// 	case 3:
+// 		checktype = "ចូលធ្វេីការវែនទី២"
+// 	case 4:
+// 		checktype = "ចេញពីធ្វេីការវែនទី២"
+// 	default:
+// 		return fmt.Errorf("unknown record type: %d", current.recordType)
+// 	}
+// 	GroupChatIDDecrypt, err := utils.DecryptChatID(*user.Company.GroupChatID)
+// 	BotTokenDecrypt, err := utils.DecryptBotToken(*user.Company.BotToken)
+// 	message := fmt.Sprintf(
+// 		"<b>%s</b>\n\n"+
+// 			"👤 ឈ្មោះ: %s\n"+
+// 			"🏢 សាខា: %s\n"+
+// 			"🕒 ម៉ោងត្រូវស្កែន: %s\n"+
+// 			"🕒 ម៉ោងបានស្កែន: %s\n"+
+// 			"%s\n"+
+// 			"%s\n"+
+// 			"មូលហេតុ: %s\n",
+// 		checktype,
+// 		user.Name,
+// 		user.Company.Name,
+// 		workTime,
+// 		now.Format("15:04:05"),
+// 		lateText,
+// 		zoneText,
+// 		input.Reason,
+// 	)
+// 	go helper.SendTelegramMessage(message, GroupChatIDDecrypt, BotTokenDecrypt)
+
+// 	if err := tx.Commit().Error; err != nil {
+// 		return err
+// 	}
+// 	committed = true
+// 	return nil
+
+// }
+
 func (s *attendanceservice) GetAttendanceDraft(ctx context.Context, id int) (response.AttendanceResponseDraft, error) {
 	now := time.Now()
 	currentDate := now.Format("2006-01-02")
@@ -373,6 +595,7 @@ func (s *attendanceservice) GetAttendanceDraft(ctx context.Context, id int) (res
 	if err != nil {
 		return response.AttendanceResponseDraft{}, err
 	}
+
 	var current sessionConfig
 	txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var attendance model.Attendance
