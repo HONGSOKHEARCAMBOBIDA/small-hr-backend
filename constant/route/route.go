@@ -25,6 +25,7 @@ const (
 	DeleteUser       = "delete.user/:id"
 	ViewUserData     = "view.user.data"
 	ViewUserApprove  = "view.user.approve"
+	VerifyUser       = "verify.user/:id"
 
 	// Shift
 	EditShift = "edit.shift"

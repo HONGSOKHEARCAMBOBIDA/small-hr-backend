@@ -22,6 +22,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AuthService interface {
@@ -38,6 +39,7 @@ type AuthService interface {
 	DeleteUser(ctx context.Context, id int, userIDlogin int) error
 	GetUserData(ctx context.Context, id int) (response.UserDataResponse, error)
 	GetUserApprove(ctx context.Context, id int) ([]response.UserApprove, error)
+	VerifyUser(ctx context.Context, id int) error
 }
 
 type authservice struct {
@@ -888,4 +890,43 @@ func (s *authservice) GetUserApprove(ctx context.Context, id int) ([]response.Us
 	}
 
 	return userApproves, nil
+}
+
+func (s *authservice) VerifyUser(ctx context.Context, id int) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid id: %d", id)
+	}
+
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return fmt.Errorf("failed to start transaction: %w", tx.Error)
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	var user model.User
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, id).Error; err != nil {
+		return fmt.Errorf("failed to lock row: %w", err)
+	}
+
+	result := tx.Model(&model.User{}).
+		Where("id = ?", id).
+		Update("is_verify", !user.IsVerify)
+	if result.Error != nil {
+		return fmt.Errorf("failed to verify user: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("failed to update verification status")
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	committed = true
+	return nil
 }

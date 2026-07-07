@@ -155,8 +155,8 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 
 	var current sessionConfig
 	var record model.AttendanceRecord
-	var attendanceID uint
-	var justCompleted bool
+	// var attendanceID uint
+	// var justCompleted bool
 
 	txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var attendance model.Attendance
@@ -207,13 +207,13 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 		if err := tx.Create(&record).Error; err != nil {
 			return fmt.Errorf("failed to created attendance record: %w", err)
 		}
-		attendanceID = uint(attendance.ID)
+		// attendanceID = uint(attendance.ID)
 		if recordCount+1 >= maxRecords {
 			if err := tx.Model(&model.Attendance{}).Where("id = ?", attendance.ID).
 				Update("status", "COMPLETE").Error; err != nil {
 				return fmt.Errorf("faild to update attendance status %w", err)
 			}
-			justCompleted = true
+			// justCompleted = true
 		}
 		return nil
 	})
@@ -222,8 +222,8 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	}
 	s.notifyTelegram(user, shift, current, record, currentTime, inzone, input.Reason)
 
-	_ = attendanceID
-	_ = justCompleted
+	// _ = attendanceID
+	// _ = justCompleted
 	return nil
 }
 
@@ -738,21 +738,26 @@ func (s *attendanceservice) GetAttendanceDraft(ctx context.Context, id int) (res
 // }
 
 func applyAccessFilterAttendance(query *gorm.DB, db *gorm.DB, role model.Role, user model.User) *gorm.DB {
-	if role.Level > 1 && role.Level < 7 {
+	if role.Level > RoleLevelStaft && role.Level <= RoleLevelDeveloper {
 		switch user.ManageCompany {
-		case 1:
+		case ManageOneCompany:
 			return query.Where("u.company_id =?", user.CompanyID)
-		case 2:
+		case ManageMultipleCompany:
 			var companyIDs []int
 			db.Model(&model.UserCompany{}).Where("user_id =?", user.ID).Pluck("company_id", &companyIDs)
 			if len(companyIDs) == 0 {
 				return query.Where("1 = 0")
 			}
 			return query.Where("u.company_id IN ?", companyIDs)
+		case ManageAllCompany:
+			return query
+		default:
+			return query.Where("1 = 0")
 		}
-		return query
-	} else if role.Level <= 1 {
+	} else if role.Level <= RoleLevelStaft {
 		return query.Where("u.id =?", user.ID)
+	} else if role.Level > RoleLevelManager {
+		return query
 	}
 
 	return query
@@ -760,6 +765,7 @@ func applyAccessFilterAttendance(query *gorm.DB, db *gorm.DB, role model.Role, u
 
 func applyCommonFilterAttendance(query *gorm.DB, filter map[string]string) *gorm.DB {
 	for key, value := range filter {
+		value = strings.TrimSpace(value)
 		if value == "" {
 			continue
 		}
