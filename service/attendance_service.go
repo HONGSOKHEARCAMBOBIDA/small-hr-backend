@@ -24,6 +24,7 @@ type AttendanceService interface {
 	GetAttendance(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.AttendanceResponse, *model.PaginationMetadata, error)
 	GetAttendanceDraft(ctx context.Context, id int) (response.AttendanceResponseDraft, error)
 	GetAttendancePDF(ctx context.Context, id int, pf request.Pagination, filter map[string]string) ([]response.AttendanceResponseGenerate, *model.PaginationMetadata, error)
+	DeleteAttendance(ctx context.Context, id int) error
 }
 
 type attendanceservice struct {
@@ -49,6 +50,15 @@ const (
 	RecordEveningCheckOut = 4
 )
 
+type LeaveSession int
+
+const (
+	LeaveNone LeaveSession = iota
+	LeaveFull
+	LeaveMorning
+	LeaveEvening
+)
+
 var recordTypeLabel = map[int]string{
 	RecordMorningCheckIn:  "ចូលធ្វេីការវែនទី១",
 	RecordMorningCheckOut: "ចេញពីធ្វេីការវែនទី១",
@@ -67,6 +77,61 @@ type sessionConfig struct {
 	scheduledTime string
 	isCheckIn     bool
 	recordType    int
+}
+
+func buildSessionV2(shift model.Shift, leave LeaveSession) ([]sessionConfig, error) {
+	if leave == LeaveFull {
+		return nil, errors.New("today is a full-day approved leave")
+	}
+	switch shift.ShiftType {
+	case MorningShiftOnly:
+		if shift.CheckIn1 == nil || shift.CheckOut1 == nil {
+			return nil, errors.New("shift type 2: CheckIn1 or CheckOut1 is not configured")
+		}
+		return []sessionConfig{
+			{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: RecordMorningCheckIn},
+			{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: RecordMorningCheckOut},
+		}, nil
+	case EveningShiftOnly:
+		if shift.CheckIn2 == nil || shift.CheckOut2 == nil {
+			return nil, errors.New("shift type 3: CheckIn2 or CheckOut2 is not configured")
+		}
+		return []sessionConfig{
+			{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: RecordEveningCheckIn},
+			{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: RecordEveningCheckOut},
+		}, nil
+	case FullShift:
+		switch leave {
+		case LeaveMorning:
+			if shift.CheckIn2 == nil || shift.CheckOut2 == nil {
+				return nil, errors.New("shift: CheckIn2 or CheckOut2 is not configured")
+			}
+			return []sessionConfig{
+				{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: RecordEveningCheckIn},
+				{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: RecordEveningCheckOut},
+			}, nil
+		case LeaveEvening:
+			if shift.CheckIn1 == nil || shift.CheckOut1 == nil {
+				return nil, errors.New("shift: CheckIn1 or CheckOut1 is not configure")
+			}
+			return []sessionConfig{
+				{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: RecordMorningCheckIn},
+				{scheduledTime: *shift.CheckOut1, isCheckIn: true, recordType: RecordEveningCheckOut},
+			}, nil
+		default:
+			if shift.CheckIn1 == nil || shift.CheckOut1 == nil || shift.CheckIn2 == nil || shift.CheckOut2 == nil {
+				return nil, errors.New("shift: one or more check-in/out times are not configured")
+			}
+			return []sessionConfig{
+				{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: RecordMorningCheckIn},
+				{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: RecordMorningCheckOut},
+				{scheduledTime: *shift.CheckIn2, isCheckIn: true, recordType: RecordEveningCheckIn},
+				{scheduledTime: *shift.CheckOut2, isCheckIn: false, recordType: RecordEveningCheckOut},
+			}, nil
+		}
+	default:
+		return nil, fmt.Errorf("unsupported shift type: %d", shift.ShiftType)
+	}
 }
 
 func buildSession(shift model.Shift) ([]sessionConfig, error) {
@@ -102,6 +167,37 @@ func buildSession(shift model.Shift) ([]sessionConfig, error) {
 	}
 }
 
+func (s *attendanceservice) getApprovedLeaveSession(ctx context.Context, userID int) (LeaveSession, error) {
+	currentDate := time.Now().Format("2006-01-02")
+
+	var leaveRequest model.LeaveRequest
+	err := s.db.WithContext(ctx).
+		Preload("LeaveDeductType").
+		Where("user_id = ? AND status = ? AND start_date <= ? AND end_date >= ?",
+			userID, 2, currentDate, currentDate).
+		First(&leaveRequest).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// no approved leave today -> normal full-day attendance flow
+			return LeaveNone, nil
+		}
+		return LeaveNone, fmt.Errorf("failed to load leave request: %w", err)
+	}
+
+	deductCode := leaveRequest.LeaveDeductType.Code
+	switch deductCode {
+	case "FULL_DAY":
+		return LeaveFull, nil
+	case "HALF_AM":
+		return LeaveMorning, nil
+	case "HALF_PM":
+		return LeaveEvening, nil
+	default:
+		return LeaveNone, fmt.Errorf("unknown leave deduct type code: %s", deductCode)
+	}
+}
+
 func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input request.AttendanceRequestCreate) error {
 	now := time.Now()
 	currentDate := now.Format("2006-01-02")
@@ -133,7 +229,12 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 		return errors.New("today is dayoff")
 	}
 
-	sessions, err := buildSession(shift)
+	leave, err := s.getApprovedLeaveSession(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+
+	sessions, err := buildSessionV2(shift, leave)
 	if err != nil {
 		return err
 	}
@@ -604,7 +705,12 @@ func (s *attendanceservice) GetAttendanceDraft(ctx context.Context, id int) (res
 		return response.AttendanceResponseDraft{}, errors.New("today is a day off")
 	}
 
-	sessions, err := buildSession(shift)
+	leave, err := s.getApprovedLeaveSession(ctx, user.ID)
+	if err != nil {
+		return response.AttendanceResponseDraft{}, err
+	}
+
+	sessions, err := buildSessionV2(shift, leave)
 	if err != nil {
 		return response.AttendanceResponseDraft{}, err
 	}
@@ -1026,4 +1132,25 @@ func (s *attendanceservice) GetAttendancePDF(ctx context.Context, id int, pf req
 	}
 
 	return attendance, helper.BuildPaginationMeta(pf, totalCount), nil
+}
+
+func (s *attendanceservice) DeleteAttendance(ctx context.Context, id int) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+
+		if err := tx.
+			Where("attendance_id = ?", id).
+			Delete(&model.AttendanceRecord{}).Error; err != nil {
+
+			return fmt.Errorf("failed to delete attendance record: %w", err)
+		}
+
+		if err := tx.
+			Where("id = ?", id).
+			Delete(&model.Attendance{}).Error; err != nil {
+
+			return fmt.Errorf("failed to delete attendance: %w", err)
+		}
+
+		return nil
+	})
 }

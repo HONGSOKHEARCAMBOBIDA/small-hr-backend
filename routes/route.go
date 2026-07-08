@@ -62,6 +62,7 @@ func SetupRoutes(r *gin.Engine) {
 		auth.GET(route.ViewAttendance, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendance)
 		auth.GET(route.ViewAttendanceDraft, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendanceDraft)
 		auth.GET(route.GenerateAttendancePDF, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendancePDF)
+		auth.DELETE(route.DeleteAttendance, middleware.PermissionMiddleware(permission.DeleteBackup), attendancecontroller.DeleteAttendance)
 
 		// Payroll
 		auth.GET(route.ViewPayrollDraft, middleware.PermissionMiddleware(permission.ViewPayroll), payrollcontroller.GetDraftPayroll)

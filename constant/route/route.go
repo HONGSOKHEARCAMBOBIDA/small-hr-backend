@@ -36,6 +36,7 @@ const (
 	ViewAttendance      = "view.attendance"
 	ViewAttendanceDraft = "view.attendance.draft"
 	EditAttendance      = "edit.attendance"
+	DeleteAttendance    = "delete.attendance/:id"
 
 	// Payroll
 	AddPayroll            = "add.payroll"

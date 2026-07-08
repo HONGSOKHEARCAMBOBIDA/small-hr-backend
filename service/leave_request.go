@@ -330,9 +330,9 @@ func validateLeaveRequestUpdateInput(input request.LeaveRequestUpdate, userID in
 		}
 	}
 
-	if *input.ApproveBy == userID {
-		return errors.New("អ្នកខ្លួនឯងមិនអាចអនុម័តច្បាប់ខ្លួនឯងទេ")
-	}
+	// if *input.ApproveBy == userID {
+	// 	return errors.New("អ្នកខ្លួនឯងមិនអាចអនុម័តច្បាប់ខ្លួនឯងទេ")
+	// }
 
 	return nil
 }
@@ -432,9 +432,9 @@ func (s *leaveRequestService) UpdateStatusLeaveRequest(ctx context.Context, user
 	if result.Error != nil {
 		return fmt.Errorf("faild to update: %w", result.Error)
 	}
-	if result.RowsAffected == 0 {
-		return errors.New("មិនអាចធ្វើបច្ចុប្បន្នភាពស្ថានភាពបានទេ")
-	}
+	// if result.RowsAffected == 0 {
+	// 	return errors.New("មិនអាចធ្វើបច្ចុប្បន្នភាពស្ថានភាពបានទេ")
+	// }
 
 	return tx.Commit().Error
 

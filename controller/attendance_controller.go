@@ -131,3 +131,17 @@ func (cr *AttendanceController) GetAttendancePDF(c *gin.Context) {
 		"pagination": metadata,
 	})
 }
+
+func (cr *AttendanceController) DeleteAttendance(c *gin.Context) {
+	idparam := c.Param("id")
+	id, err := strconv.Atoi(idparam)
+	if err != nil {
+		share.ResponseError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := cr.service.DeleteAttendance(c, id); err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.ResponseSuccess(c, http.StatusOK, "Deleted")
+}
