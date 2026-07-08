@@ -40,6 +40,7 @@ type AuthService interface {
 	GetUserData(ctx context.Context, id int) (response.UserDataResponse, error)
 	GetUserApprove(ctx context.Context, id int) ([]response.UserApprove, error)
 	VerifyUser(ctx context.Context, id int) error
+	Logout(ctx context.Context, id int) error
 }
 
 type authservice struct {
@@ -63,6 +64,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	if err := s.db.Select("id, phone_hash, password_hash, role_id, is_active, name").
 		Where("phone_hash = ? AND is_active = 1", phonehash).
 		First(&user).Error; err != nil {
+
 		return nil, errors.New("ព័ត៌មានមិនត្រឹមត្រូវ ឬ អ្នកប្រើប្រាស់ត្រូវបានបិទគណនី")
 	}
 
@@ -145,10 +147,7 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 		true, // httpOnly - JS cannot read this
 	)
 	resp := &response.AuthResponse{
-		// ID:          user.ID,
-		// Name:        user.Name,
 		AccessToken: accessTokenStr,
-		//Permissions: permissions,
 	}
 
 	return resp, nil
@@ -928,5 +927,21 @@ func (s *authservice) VerifyUser(ctx context.Context, id int) error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	committed = true
+	return nil
+}
+
+func (s *authservice) Logout(ctx context.Context, userID int) error {
+	if userID <= 0 {
+		return fmt.Errorf("invalid user id: %d", userID)
+	}
+
+	result := s.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Delete(&model.Session{})
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete sessions for user %d: %w", userID, result.Error)
+	}
+
 	return nil
 }

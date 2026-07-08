@@ -59,7 +59,7 @@ func (s *payrollservice) GetDraftPayroll(ctx context.Context, payrolltype int, c
 			c.left_early_penalty        AS left_early_penalty,
 			c.total_work_day            AS company_total_work_day,
 			COUNT(DISTINCT CASE WHEN             a.is_paid = false THEN a.id END) AS total_work_day,
-			COUNT(DISTINCT CASE WHEN ar.attendance_type = 3 AND a.is_paid = false THEN ar.id END) AS total_late,
+			COUNT(DISTINCT CASE WHEN ar.attendance_type = 3 AND ar.is_permission = false AND a.is_paid = false THEN ar.id END) AS total_late,
 			COUNT(DISTINCT CASE WHEN ar.attendance_type = 4 AND a.is_paid = false THEN ar.id END) AS total_left_early
 		FROM user u
 		LEFT JOIN role r ON r.id = u.role_id

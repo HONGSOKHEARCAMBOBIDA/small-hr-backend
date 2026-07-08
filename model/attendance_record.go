@@ -13,6 +13,7 @@ type AttendanceRecord struct {
 	Inzone         bool   `json:"inzone" gorm:"column:inzone"`
 	Latitude       string `json:"latitdude" gorm:"column:latitdude"`
 	Longitude      string `json:"longitude" gorm:"column:longitude"`
+	IsPermission   bool   `json:"is_permission" gorm:"column:is_permission"`
 }
 
 func (AttendanceRecord) TableName() string {

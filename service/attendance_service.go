@@ -107,6 +107,18 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	currentDate := now.Format("2006-01-02")
 	currentTime := now.Format("15:04:05")
 	dayofweek := helper.GetCurrentDay()
+	var leaverequest model.LeaveRequest
+
+	if input.IsPermission {
+		err := s.db.WithContext(ctx).Where("user_id = ? AND status = ? AND start_date <= ? AND end_date >= ?",
+			id, 2, currentDate, currentDate).First(&leaverequest).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errors.New("គ្មានច្បាប់ឬច្បាប់របស់អ្នកមិនទាន់អនុម័ត")
+			}
+			return fmt.Errorf("failed to load leave request: %w", err)
+		}
+	}
 
 	var user model.User
 	if err := s.db.WithContext(ctx).Preload("Company").First(&user, id).Error; err != nil {
@@ -203,6 +215,7 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 			Inzone:         inzone,
 			Latitude:       input.Latitude,
 			Longitude:      input.Longitude,
+			IsPermission:   input.IsPermission,
 		}
 		if err := tx.Create(&record).Error; err != nil {
 			return fmt.Errorf("failed to created attendance record: %w", err)
