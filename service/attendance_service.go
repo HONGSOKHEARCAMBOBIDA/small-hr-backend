@@ -13,7 +13,6 @@ import (
 	"mysql/utils"
 	"strconv"
 	"strings"
-	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -57,6 +56,10 @@ const (
 	LeaveFull
 	LeaveMorning
 	LeaveEvening
+)
+
+const (
+	LeaveStatusApproved = 2
 )
 
 var recordTypeLabel = map[int]string{
@@ -112,11 +115,11 @@ func buildSessionV2(shift model.Shift, leave LeaveSession) ([]sessionConfig, err
 			}, nil
 		case LeaveEvening:
 			if shift.CheckIn1 == nil || shift.CheckOut1 == nil {
-				return nil, errors.New("shift: CheckIn1 or CheckOut1 is not configure")
+				return nil, errors.New("shift: CheckIn1 or CheckOut1 is not configured")
 			}
 			return []sessionConfig{
 				{scheduledTime: *shift.CheckIn1, isCheckIn: true, recordType: RecordMorningCheckIn},
-				{scheduledTime: *shift.CheckOut1, isCheckIn: true, recordType: RecordEveningCheckOut},
+				{scheduledTime: *shift.CheckOut1, isCheckIn: false, recordType: RecordMorningCheckOut},
 			}, nil
 		default:
 			if shift.CheckIn1 == nil || shift.CheckOut1 == nil || shift.CheckIn2 == nil || shift.CheckOut2 == nil {
@@ -168,14 +171,14 @@ func buildSession(shift model.Shift) ([]sessionConfig, error) {
 }
 
 func (s *attendanceservice) getApprovedLeaveSession(ctx context.Context, userID int) (LeaveSession, error) {
-	currentDate := time.Now().Format("2006-01-02")
+	currentDate := helper.CurrentDate()
 
 	var leaveRequest model.LeaveRequest
 	err := s.db.WithContext(ctx).
 		Preload("LeaveDeductType").
 		Where("user_id = ? AND status = ? AND start_date <= ? AND end_date >= ?",
-			userID, 2, currentDate, currentDate).
-		First(&leaveRequest).Error
+			userID, LeaveStatusApproved, currentDate, currentDate).
+		First(&leaveRequest).Order("id ASC").Error
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -199,22 +202,21 @@ func (s *attendanceservice) getApprovedLeaveSession(ctx context.Context, userID 
 }
 
 func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input request.AttendanceRequestCreate) error {
-	now := time.Now()
-	currentDate := now.Format("2006-01-02")
-	currentTime := now.Format("15:04:05")
+	currentDate := helper.CurrentDate()
+	currentTime := helper.CurrentTime()
 	dayofweek := helper.GetCurrentDay()
-	var leaverequest model.LeaveRequest
+	// var leaverequest model.LeaveRequest
 
-	if input.IsPermission {
-		err := s.db.WithContext(ctx).Where("user_id = ? AND status = ? AND start_date <= ? AND end_date >= ?",
-			id, 2, currentDate, currentDate).First(&leaverequest).Error
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return errors.New("គ្មានច្បាប់ឬច្បាប់របស់អ្នកមិនទាន់អនុម័ត")
-			}
-			return fmt.Errorf("failed to load leave request: %w", err)
-		}
-	}
+	// if input.IsPermission {
+	// 	err := s.db.WithContext(ctx).Where("user_id = ? AND status = ? AND start_date <= ? AND end_date >= ?",
+	// 		id, 2, currentDate, currentDate).First(&leaverequest).Error
+	// 	if err != nil {
+	// 		if errors.Is(err, gorm.ErrRecordNotFound) {
+	// 			return errors.New("គ្មានច្បាប់ឬច្បាប់របស់អ្នកមិនទាន់អនុម័ត")
+	// 		}
+	// 		return fmt.Errorf("failed to load leave request: %w", err)
+	// 	}
+	// }
 
 	var user model.User
 	if err := s.db.WithContext(ctx).Preload("Company").First(&user, id).Error; err != nil {
@@ -225,6 +227,7 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	if err := s.db.WithContext(ctx).Where("user_id = ? AND day = ?", user.ID, dayofweek).First(&shift).Error; err != nil {
 		return fmt.Errorf("failed to load shift: %w", err)
 	}
+
 	if shift.IsDayoff {
 		return errors.New("today is dayoff")
 	}
@@ -243,22 +246,27 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	if err != nil {
 		return fmt.Errorf("invalid company latitude: %w", err)
 	}
+
 	companyLng, err := strconv.ParseFloat(user.Company.Longitude, 64)
 	if err != nil {
 		return fmt.Errorf("invalid company longitude: %w", err)
 	}
+
 	userLat, err := strconv.ParseFloat(input.Latitude, 64)
 	if err != nil {
 		return fmt.Errorf("invalid user latitude: %w", err)
 	}
+
 	userLng, err := strconv.ParseFloat(input.Longitude, 64)
 	if err != nil {
 		return fmt.Errorf("invalid user longitude :%w", err)
 	}
+
 	radius, err := strconv.ParseFloat(user.Company.Radius, 64)
 	if err != nil {
 		return fmt.Errorf("invalid company redius: %w", err)
 	}
+
 	distance := utils.CalculateDistance(companyLat, companyLng, userLat, userLng)
 	inzone := distance <= radius
 
@@ -294,6 +302,7 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 		if err := tx.Where("attendance_id = ?", attendance.ID).Order("id ASC").Find(&existingRecords).Error; err != nil {
 			return fmt.Errorf("failed to load attendance :%w", err)
 		}
+
 		recordCount := len(existingRecords)
 		maxRecords := len(sessions)
 
@@ -316,7 +325,7 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 			Inzone:         inzone,
 			Latitude:       input.Latitude,
 			Longitude:      input.Longitude,
-			IsPermission:   input.IsPermission,
+			//	IsPermission:   input.IsPermission,
 		}
 		if err := tx.Create(&record).Error; err != nil {
 			return fmt.Errorf("failed to created attendance record: %w", err)
@@ -681,8 +690,7 @@ func attendanceTypeLabel(attendanceType int) string {
 // }
 
 func (s *attendanceservice) GetAttendanceDraft(ctx context.Context, id int) (response.AttendanceResponseDraft, error) {
-	now := time.Now()
-	currentDate := now.Format("2006-01-02")
+	currentDate := helper.CurrentDate()
 	dayOfWeek := helper.GetCurrentDay()
 
 	var user model.User

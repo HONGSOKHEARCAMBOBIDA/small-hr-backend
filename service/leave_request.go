@@ -419,9 +419,9 @@ func (s *leaveRequestService) UpdateStatusLeaveRequest(ctx context.Context, user
 		return err
 	}
 
-	if leaveRequest.UserID == user_id {
-		return errors.New("អ្នកមិនអាចអនុម័តច្បាប់របស់ខ្លួនឯងបានទេ")
-	}
+	// if leaveRequest.UserID == user_id {
+	// 	return errors.New("អ្នកមិនអាចអនុម័តច្បាប់របស់ខ្លួនឯងបានទេ")
+	// }
 
 	updates := map[string]interface{}{
 		"status":      *input.Status,
