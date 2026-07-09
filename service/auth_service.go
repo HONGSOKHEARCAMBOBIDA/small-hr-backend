@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"log/slog"
 	"mysql/config"
 	"mysql/helper"
@@ -51,6 +50,14 @@ func NewAuthService() AuthService {
 	return &authservice{
 		db: config.DB,
 	}
+}
+
+var requiredPermissions = []string{
+	"add.payroll", "edit.payroll", "add.backup", "view.backup",
+	"view.download.backup", "delete.backup", "add.company",
+	"edit.company", "edit.user", "add.user", "edit.leave.type",
+	"add.leave.type", "edit.leave.request", "edit.status.leave.request",
+	"add.role.has.permission",
 }
 
 func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*response.AuthResponse, error) {
@@ -121,7 +128,6 @@ func (s *authservice) Login(input request.AuthRequest, c *gin.Context) (*respons
 	tokenPrefix := refreshTokenStr[:16]
 	hashedRefresh := utils.HashToken(refreshTokenStr)
 	if err := s.db.Where("user_id = ?", user.ID).Delete(&model.Session{}).Error; err != nil {
-		log.Printf(err.Error())
 		return nil, fmt.Errorf("failed to delete session")
 	}
 	refreshExpiry := time.Now().Add(time.Duration(refreshtoken) * 24 * time.Hour)
@@ -221,7 +227,6 @@ func (s *authservice) LoginByQr(input request.LoginQrRequest, c *gin.Context) (*
 	tokenPrefix := refreshTokenStr[:16]
 	hashedRefresh := utils.HashToken(refreshTokenStr)
 	if err := s.db.Where("user_id = ?", user.ID).Delete(&model.Session{}).Error; err != nil {
-		log.Printf(err.Error())
 		return nil, fmt.Errorf("failed to delete session")
 	}
 
@@ -379,15 +384,6 @@ func (s *authservice) Register(ctx context.Context, input request.RegisterReques
 	if err != nil {
 		return err
 	}
-	if err != nil {
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	if err != nil {
-		return err
-	}
 	companyID := input.CompanyID
 	if companyID == 0 {
 		companyID = usrlog.CompanyID
@@ -542,7 +538,6 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 		users[i].GenderString = helper.Gender(users[i].Gender)
 		decrypted, err := helper.DecryptSalary(users[i].BaseSalary)
 		if err != nil {
-			log.Printf(err.Error())
 			return nil, nil, err
 		}
 		users[i].BaseSalary = decrypted
@@ -553,7 +548,6 @@ func (s *authservice) GetUser(ctx context.Context, id int, pf request.Pagination
 		users[i].PhoneHash = phonedecript
 		qrtokendecript, err := helper.DecryptQRTOKEN(users[i].QrToken)
 		if err != nil {
-			log.Printf(err.Error())
 			return nil, nil, err
 		}
 		users[i].QrToken = qrtokendecript
@@ -832,8 +826,10 @@ func (s *authservice) GetUserData(ctx context.Context, id int) (response.UserDat
 			u.name AS name,
 			u.role_id AS role_id
 		`).
-		Where("u.id = ?", id).
-		Scan(&userdata).Error
+		Where("u.id = ?", id).First(&userdata).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return userdata, fmt.Errorf("user with id %d not found", id)
+	}
 
 	if err != nil {
 		return userdata, fmt.Errorf("failed to get user data: %w", err)
@@ -848,13 +844,7 @@ func (s *authservice) GetUserData(ctx context.Context, id int) (response.UserDat
 		Table("permission p").
 		Select("p.name AS name").
 		Joins("JOIN role_permission rhp ON rhp.permission_id = p.id").
-		Where("rhp.role_id = ? AND p.name IN ?", userdata.RoleID, []string{
-			"add.payroll", "edit.payroll", "add.backup", "view.backup",
-			"view.download.backup", "delete.backup", "add.company",
-			"edit.company", "edit.user", "add.user", "edit.leave.type",
-			"add.leave.type", "edit.leave.request", "edit.status.leave.request",
-			"add.role.has.permission",
-		}).
+		Where("rhp.role_id = ? AND p.name IN ?", userdata.RoleID, requiredPermissions).
 		Scan(&permissions).Error; err != nil {
 		return userdata, fmt.Errorf("failed to get user permissions: %w", err)
 	}
@@ -942,6 +932,5 @@ func (s *authservice) Logout(ctx context.Context, userID int) error {
 	if result.Error != nil {
 		return fmt.Errorf("failed to delete sessions for user %d: %w", userID, result.Error)
 	}
-
 	return nil
 }

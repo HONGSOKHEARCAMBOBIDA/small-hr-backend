@@ -270,3 +270,16 @@ func (cr *AuthController) VerifyUser(c *gin.Context) {
 	}
 	share.ResponseSuccess(c, http.StatusOK, "User Verify")
 }
+
+func (cr *AuthController) Logout(c *gin.Context) {
+	userlog, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "invalid user context")
+		return
+	}
+	if err := cr.service.Logout(c, userlog); err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.ResponseSuccess(c, http.StatusOK, "Logout Success")
+}

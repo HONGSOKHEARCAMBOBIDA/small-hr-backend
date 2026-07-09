@@ -52,6 +52,7 @@ func SetupRoutes(r *gin.Engine) {
 		auth.GET(route.ViewUserData, middleware.PermissionMiddleware(permission.ViewUser), authcontroller.GetUserData)
 		auth.GET(route.ViewUserApprove, middleware.PermissionMiddleware(permission.ViewUser), authcontroller.GetUserApprove)
 		auth.PUT(route.VerifyUser, middleware.PermissionMiddleware(permission.EditUser), authcontroller.VerifyUser)
+		auth.POST(route.Logout, authcontroller.Logout)
 
 		// Shift
 		auth.PUT(route.EditShift, middleware.PermissionMiddleware(permission.EditUser), shiftcontroller.UpdateShift)
@@ -62,7 +63,7 @@ func SetupRoutes(r *gin.Engine) {
 		auth.GET(route.ViewAttendance, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendance)
 		auth.GET(route.ViewAttendanceDraft, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendanceDraft)
 		auth.GET(route.GenerateAttendancePDF, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendancePDF)
-		auth.DELETE(route.DeleteAttendance, middleware.PermissionMiddleware(permission.DeleteBackup), attendancecontroller.DeleteAttendance)
+		//auth.DELETE(route.DeleteAttendance, middleware.PermissionMiddleware(permission.DeleteBackup), attendancecontroller.DeleteAttendance)
 
 		// Payroll
 		auth.GET(route.ViewPayrollDraft, middleware.PermissionMiddleware(permission.ViewPayroll), payrollcontroller.GetDraftPayroll)

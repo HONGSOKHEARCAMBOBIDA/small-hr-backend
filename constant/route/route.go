@@ -6,6 +6,7 @@ const (
 	Login     = "login"
 	LoginByQr = "loginbyqr"
 	Refresh   = "refresh"
+	Logout    = "logout"
 
 	// Company
 	AddCompany        = "add.company"
