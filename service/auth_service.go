@@ -824,7 +824,8 @@ func (s *authservice) GetUserData(ctx context.Context, id int) (response.UserDat
 		Select(`
 			u.id AS id,
 			u.name AS name,
-			u.role_id AS role_id
+			u.role_id AS role_id,
+			u.company_id AS company_id
 		`).
 		Where("u.id = ?", id).First(&userdata).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

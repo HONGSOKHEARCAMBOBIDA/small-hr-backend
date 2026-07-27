@@ -218,6 +218,12 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	// 	}
 	// }
 
+	var company model.Company
+
+	if err := s.db.WithContext(ctx).First(&company, input.CompanyID).Error; err != nil {
+		return fmt.Errorf("failed to load company: %w", err)
+	}
+
 	var user model.User
 	if err := s.db.WithContext(ctx).Preload("Company").First(&user, id).Error; err != nil {
 		return fmt.Errorf("failed to load user: %w", err)
@@ -242,12 +248,12 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 		return err
 	}
 
-	companyLat, err := strconv.ParseFloat(user.Company.Latitude, 64)
+	companyLat, err := strconv.ParseFloat(company.Latitude, 64)
 	if err != nil {
 		return fmt.Errorf("invalid company latitude: %w", err)
 	}
 
-	companyLng, err := strconv.ParseFloat(user.Company.Longitude, 64)
+	companyLng, err := strconv.ParseFloat(company.Longitude, 64)
 	if err != nil {
 		return fmt.Errorf("invalid company longitude: %w", err)
 	}
@@ -262,7 +268,7 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 		return fmt.Errorf("invalid user longitude :%w", err)
 	}
 
-	radius, err := strconv.ParseFloat(user.Company.Radius, 64)
+	radius, err := strconv.ParseFloat(company.Radius, 64)
 	if err != nil {
 		return fmt.Errorf("invalid company redius: %w", err)
 	}
@@ -270,7 +276,7 @@ func (s *attendanceservice) CreateAttendance(ctx context.Context, id int, input 
 	distance := utils.CalculateDistance(companyLat, companyLng, userLat, userLng)
 	inzone := distance <= radius
 
-	if !inzone && user.Company.CanScanOutsize == 0 {
+	if !inzone && company.CanScanOutsize == 0 {
 		return errors.New("អ្នកមិនអាចស្កែនក្រៅតំបន់ក្រុមហ៊ុនបានទេ")
 	}
 
