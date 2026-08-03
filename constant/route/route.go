@@ -15,6 +15,7 @@ const (
 	EditTelegram      = "edit.telegram/:id"
 	ViewManageCompany = "view.manage.company"
 	ViewCompanyColor  = "view.company.color"
+	ViewCompanyScan   = "view.company.scan"
 
 	// User
 	AddUser          = "add.user"

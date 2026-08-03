@@ -23,3 +23,8 @@ type CompanyResponse struct {
 type CompanyColor struct {
 	Color string `json:"color" gorm:"column:color"`
 }
+
+type CompanyScanResponse struct {
+	base.ModelBase
+	Name string `json:"name"`
+}

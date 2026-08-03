@@ -177,8 +177,8 @@ func (s *attendanceservice) getApprovedLeaveSession(ctx context.Context, userID 
 	err := s.db.WithContext(ctx).
 		Preload("LeaveDeductType").
 		Where("user_id = ? AND status = ? AND start_date <= ? AND end_date >= ?",
-			userID, LeaveStatusApproved, currentDate, currentDate).
-		First(&leaveRequest).Order("id ASC").Error
+			userID, LeaveStatusApproved, currentDate, currentDate).Order("id ASC").
+		First(&leaveRequest).Error
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

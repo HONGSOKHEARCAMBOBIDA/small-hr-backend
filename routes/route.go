@@ -38,7 +38,8 @@ func SetupRoutes(r *gin.Engine) {
 		auth.PUT(route.EditCompany, middleware.PermissionMiddleware(permission.EditCompany), companycontroller.UpdateCompany)
 		auth.PUT(route.EditTelegram, middleware.PermissionMiddleware(permission.EditCompany), companycontroller.UpdateTelegram)
 		auth.GET(route.ViewManageCompany, middleware.PermissionMiddleware(permission.ViewCompany), companycontroller.ShowManageCompany)
-		auth.GET(route.ViewCompanyColor, middleware.PermissionMiddleware(permission.ViewCompany), companycontroller.GetCompanyColor)
+		// auth.GET(route.ViewCompanyColor, middleware.PermissionMiddleware(permission.ViewCompany), companycontroller.GetCompanyColor)
+		auth.GET(route.ViewCompanyScan, middleware.PermissionMiddleware(permission.ViewCompany), companycontroller.GetCompanyScan)
 
 		// User
 		auth.POST(route.AddUser, middleware.PermissionMiddleware(permission.AddUser), authcontroller.Register)
@@ -63,7 +64,7 @@ func SetupRoutes(r *gin.Engine) {
 		auth.GET(route.ViewAttendance, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendance)
 		auth.GET(route.ViewAttendanceDraft, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendanceDraft)
 		auth.GET(route.GenerateAttendancePDF, middleware.PermissionMiddleware(permission.ViewAttendance), attendancecontroller.GetAttendancePDF)
-		//auth.DELETE(route.DeleteAttendance, middleware.PermissionMiddleware(permission.DeleteBackup), attendancecontroller.DeleteAttendance)
+		auth.DELETE(route.DeleteAttendance, middleware.PermissionMiddleware(permission.DeleteBackup), attendancecontroller.DeleteAttendance)
 
 		// Payroll
 		auth.GET(route.ViewPayrollDraft, middleware.PermissionMiddleware(permission.ViewPayroll), payrollcontroller.GetDraftPayroll)

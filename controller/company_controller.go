@@ -64,6 +64,20 @@ func (cr CompanyController) GetCompany(c *gin.Context) {
 	})
 }
 
+func (cr *CompanyController) GetCompanyScan(c *gin.Context) {
+	userID, ok := helper.GetUserID(c)
+	if !ok {
+		share.ResponseError(c, http.StatusUnauthorized, "please login")
+		return
+	}
+	data, err := cr.service.GetCompanyScan(c, userID)
+	if err != nil {
+		share.ResponseError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	share.RespondDate(c, http.StatusOK, data)
+}
+
 func (cr CompanyController) CreateCompany(c *gin.Context) {
 	var input request.CompanyRequestCreate
 	if err := c.ShouldBindJSON(&input); err != nil {

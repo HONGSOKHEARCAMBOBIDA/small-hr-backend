@@ -17,6 +17,7 @@ import (
 type CompanyService interface {
 	GetCompanyColor(userID int) (response.CompanyColor, error)
 	GetCompany(id int, ctx context.Context, pf request.Pagination) ([]response.CompanyResponse, *model.PaginationMetadata, error)
+	GetCompanyScan(ctx context.Context, id int) ([]response.CompanyScanResponse, error)
 	CreateCompany(ctx context.Context, input request.CompanyRequestCreate) error
 	UpdateCompany(ctx context.Context, id int, input request.CompanyRequesUpdate) error
 	ChangeStatusCompany(ctx context.Context, id int) error
@@ -124,6 +125,32 @@ func (s *companyservice) GetCompany(id int, ctx context.Context, pf request.Pagi
 	}
 
 	return Company, metadata, nil
+}
+
+func (s *companyservice) GetCompanyScan(ctx context.Context, id int) ([]response.CompanyScanResponse, error) {
+	var user model.User
+	if err := s.db.WithContext(ctx).
+		Select("id", "role_id", "manage_company").
+		Preload("Role").
+		First(&user, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("user not found: %w", err)
+		}
+		return nil, fmt.Errorf("failed to load user: %w", err)
+	}
+
+	var companies []response.CompanyScanResponse
+	query := s.db.WithContext(ctx).Table("company AS c").
+		Select(`
+			c.id AS id,
+			c.name AS name
+		`)
+	query = helper.ManageCompanyFilter(query, s.db, user)
+
+	if err := query.Scan(&companies).Error; err != nil {
+		return nil, fmt.Errorf("failed to scan company data: %w", err)
+	}
+	return companies, nil
 }
 
 func (s *companyservice) CreateCompany(ctx context.Context, input request.CompanyRequestCreate) error {
