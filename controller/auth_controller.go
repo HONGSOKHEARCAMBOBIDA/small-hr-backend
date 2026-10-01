@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"log"
 	"mysql/constant/share"
 	"mysql/helper"
 	"mysql/request"
@@ -29,6 +30,7 @@ func (cr *AuthController) Login(c *gin.Context) {
 	}
 	result, err := cr.service.Login(input, c)
 	if err != nil {
+		log.Printf(err.Error())
 		share.ResponseError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
